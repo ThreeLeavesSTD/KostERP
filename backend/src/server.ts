@@ -17,10 +17,27 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const CORS_ORIGIN = process.env.CORS_ORIGIN || "*";
+
+// CORS Configuration
+const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:3000")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
 
 // Middleware
-app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Izinkan request tanpa origin header (cURL, server-to-server, n8n webhook, Supabase)
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Origin not allowed by CORS"));
+      }
+    },
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 // Health Check
@@ -48,7 +65,8 @@ app.use("/api/webhooks", webhooksRoutes);
 // Global Error Handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   console.error("Backend Error:", err);
-  res.status(500).json({
+  const status = err.message === "Origin not allowed by CORS" ? 403 : (err.status || 500);
+  res.status(status).json({
     success: false,
     error: err.message || "Internal Server Error",
   });
