@@ -6,7 +6,7 @@ const router = Router();
 // GET /api/rooms
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const propertyId = req.query.property_id as string | undefined;
+    const propertyId = req.auth?.propertyId || (await SupabaseService.getDefaultPropertyId());
     const data = await SupabaseService.getRooms(propertyId);
     res.json({ success: true, data });
   } catch (error: any) {
@@ -17,7 +17,15 @@ router.get("/", async (req: Request, res: Response) => {
 // POST /api/rooms
 router.post("/", async (req: Request, res: Response) => {
   try {
-    const data = await SupabaseService.createRoom(req.body);
+    const role = req.auth?.role;
+    if (role === "cleaning_staff") {
+      return res.status(403).json({ success: false, error: "Forbidden: Cleaning staff tidak memiliki hak menambah kamar." });
+    }
+    const propertyId = req.auth?.propertyId || (await SupabaseService.getDefaultPropertyId());
+    const data = await SupabaseService.createRoom({
+      ...req.body,
+      property_id: propertyId,
+    });
     res.status(201).json({ success: true, data });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message });
@@ -27,6 +35,10 @@ router.post("/", async (req: Request, res: Response) => {
 // PUT /api/rooms/:id
 router.put("/:id", async (req: Request, res: Response) => {
   try {
+    const role = req.auth?.role;
+    if (role === "cleaning_staff") {
+      return res.status(403).json({ success: false, error: "Forbidden: Cleaning staff tidak memiliki hak mengubah data kamar." });
+    }
     const id = req.params.id as string;
     const data = await SupabaseService.updateRoom(id, req.body);
     res.json({ success: true, data });
@@ -38,6 +50,10 @@ router.put("/:id", async (req: Request, res: Response) => {
 // DELETE /api/rooms/:id
 router.delete("/:id", async (req: Request, res: Response) => {
   try {
+    const role = req.auth?.role;
+    if (role === "cleaning_staff") {
+      return res.status(403).json({ success: false, error: "Forbidden: Cleaning staff tidak memiliki hak menghapus kamar." });
+    }
     const id = req.params.id as string;
     const data = await SupabaseService.deleteRoom(id);
     res.json({ success: true, data });

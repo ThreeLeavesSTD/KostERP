@@ -6,7 +6,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { UserRole } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { KostApiClient } from "@/lib/api-client";
 import { NotificationPopover } from "./notification-popover";
 
 interface HeaderProps {
@@ -21,14 +21,16 @@ export function Header({ currentRole, activeTab, onTabChange, onLogout }: Header
   const [propertyAddress, setPropertyAddress] = useState("Margonda, Depok");
 
   useEffect(() => {
-    KostStorage.init();
-    const props = KostStorage.getProperties();
-    if (props.length > 0) {
-      setPropertyName(props[0].name);
-      if (props[0].address) {
-        setPropertyAddress(props[0].address.split(",")[0] || "Depok");
-      }
-    }
+    KostApiClient.getProperties()
+      .then((props) => {
+        if (props.length > 0) {
+          setPropertyName(props[0].name);
+          if (props[0].address) {
+            setPropertyAddress(props[0].address.split(",")[0] || "Depok");
+          }
+        }
+      })
+      .catch(() => {});
   }, []);
 
   return (

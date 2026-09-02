@@ -40,6 +40,12 @@ export const SupabaseService = {
     return data;
   },
 
+  async deleteProperty(id: string) {
+    const { error } = await supabase.from("properties").delete().eq("id", id);
+    if (error) throw error;
+    return { success: true };
+  },
+
   // Rooms
   async getRooms(propertyId?: string) {
     let query = supabase.from("rooms").select(`
@@ -318,6 +324,12 @@ export const SupabaseService = {
     return data;
   },
 
+  async deleteLease(id: string) {
+    const { error } = await supabase.from("leases").delete().eq("id", id);
+    if (error) throw error;
+    return { success: true };
+  },
+
   // Invoices
   async getInvoices(propertyId?: string) {
     let query = supabase.from("invoices").select(`
@@ -393,6 +405,12 @@ export const SupabaseService = {
     const { data, error } = await supabase.from("invoices").update(payload).eq("id", id).select().single();
     if (error) throw error;
     return data;
+  },
+
+  async deleteInvoice(id: string) {
+    const { error } = await supabase.from("invoices").delete().eq("id", id);
+    if (error) throw error;
+    return { success: true };
   },
 
   // Payments
@@ -531,6 +549,12 @@ export const SupabaseService = {
     return data;
   },
 
+  async deleteComplaint(id: string) {
+    const { error } = await supabase.from("room_complaints").delete().eq("id", id);
+    if (error) throw error;
+    return { success: true };
+  },
+
   // Finance Wallets & Transactions
   async getWallets(propertyId?: string) {
     let query = supabase.from("finance_wallets").select("*").order("created_at", { ascending: true });
@@ -562,6 +586,50 @@ export const SupabaseService = {
     const { data, error } = await supabase.from("finance_wallets").insert(insertObj).select().single();
     if (error) throw error;
     return data;
+  },
+
+  async updateWallet(id: string, payload: any) {
+    const { data, error } = await supabase.from("finance_wallets").update(payload).eq("id", id).select().single();
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteWallet(id: string) {
+    const { error } = await supabase.from("finance_wallets").delete().eq("id", id);
+    if (error) throw error;
+    return { success: true };
+  },
+
+  async getFinanceCategories() {
+    const { data, error } = await supabase.from("finance_categories").select("*").order("created_at", { ascending: true });
+    if (error) throw error;
+    return data;
+  },
+
+  async createFinanceCategory(payload: any) {
+    const insertObj: any = {
+      name: payload.name,
+      type: payload.type || "expense",
+      category_kind: payload.category_kind || payload.type || "expense",
+      icon: payload.icon || null,
+      is_default: Boolean(payload.is_default),
+    };
+    if (isValidUUID(payload.id)) insertObj.id = payload.id;
+    const { data, error } = await supabase.from("finance_categories").insert(insertObj).select().single();
+    if (error) throw error;
+    return data;
+  },
+
+  async updateFinanceCategory(id: string, payload: any) {
+    const { data, error } = await supabase.from("finance_categories").update(payload).eq("id", id).select().single();
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteFinanceCategory(id: string) {
+    const { error } = await supabase.from("finance_categories").delete().eq("id", id);
+    if (error) throw error;
+    return { success: true };
   },
 
   async getCashTransactions(propertyId?: string) {
@@ -599,6 +667,18 @@ export const SupabaseService = {
     return data;
   },
 
+  async updateCashTransaction(id: string, payload: any) {
+    const { data, error } = await supabase.from("cash_transactions").update(payload).eq("id", id).select().single();
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteCashTransaction(id: string) {
+    const { error } = await supabase.from("cash_transactions").delete().eq("id", id);
+    if (error) throw error;
+    return { success: true };
+  },
+
   // Payment Methods
   async getPaymentMethods(propertyId?: string) {
     let query = supabase.from("payment_methods_config").select("*").order("created_at", { ascending: true });
@@ -620,5 +700,95 @@ export const SupabaseService = {
     const { data, error } = await supabase.from("payment_methods_config").update(payload).eq("id", id).select().single();
     if (error) throw error;
     return data;
+  },
+
+  async deletePaymentMethod(id: string) {
+    const { error } = await supabase.from("payment_methods_config").delete().eq("id", id);
+    if (error) throw error;
+    return { success: true };
+  },
+
+  // Staff / User Profiles
+  async getStaff(propertyId?: string) {
+    let query = supabase.from("user_profiles").select("*").order("created_at", { ascending: true });
+    if (propertyId && isValidUUID(propertyId)) {
+      query = query.eq("property_id", propertyId);
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+  },
+
+  async updateStaff(id: string, payload: { role?: string; is_active?: boolean; full_name?: string; phone_number?: string }) {
+    const { data, error } = await supabase
+      .from("user_profiles")
+      .update(payload)
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  // Dashboard Summary Metrics (Backend-calculated)
+  async getDashboardSummary(propertyId?: string) {
+    const propId = propertyId && isValidUUID(propertyId) ? propertyId : await this.getDefaultPropertyId();
+
+    const [rooms, invoices, electricity] = await Promise.all([
+      this.getRooms(propId),
+      this.getInvoices(propId),
+      this.getElectricityTransactions(propId),
+    ]);
+
+    const totalRooms = rooms.length;
+    const occupiedRooms = rooms.filter((r: any) => r.status === "occupied").length;
+    const availableRooms = rooms.filter((r: any) => r.status === "available").length;
+    const maintenanceRooms = rooms.filter((r: any) => r.status === "maintenance").length;
+    const occupancyRate = totalRooms > 0 ? Math.round((occupiedRooms / totalRooms) * 100) : 0;
+
+    const paidInvoices = invoices.filter((i: any) => i.status === "paid");
+    const currentMonthRevenue = paidInvoices.reduce((sum: number, i: any) => sum + (Number(i.total_amount) || 0), 0);
+    const targetMonthlyRevenue = rooms.reduce((sum: number, r: any) => sum + (Number(r.base_price) || 0), 0);
+
+    const unpaidInvoices = invoices.filter((i: any) => i.status === "unpaid" || i.status === "overdue");
+    const totalUnpaidAmount = unpaidInvoices.reduce((sum: number, i: any) => sum + (Number(i.total_amount) || 0), 0);
+    const unpaidInvoicesCount = unpaidInvoices.length;
+
+    const electricityProfitTotal = electricity.reduce((sum: number, e: any) => sum + (Number(e.profit_margin) || 0), 0);
+    const electricityTransactionsCount = electricity.length;
+
+    const recentPayments: any[] = [];
+    paidInvoices.forEach((inv: any) => {
+      if (inv.payments && Array.isArray(inv.payments)) {
+        inv.payments.forEach((p: any) => {
+          recentPayments.push({
+            id: p.id,
+            invoice_number: inv.invoice_number,
+            room_number: inv.room_number || "-",
+            tenant_name: inv.tenant_name || "-",
+            amount: Number(p.amount_paid) || 0,
+            payment_method: p.payment_method,
+            paid_at: p.paid_at,
+          });
+        });
+      }
+    });
+
+    recentPayments.sort((a, b) => new Date(b.paid_at).getTime() - new Date(a.paid_at).getTime());
+
+    return {
+      totalRooms,
+      occupiedRooms,
+      availableRooms,
+      maintenanceRooms,
+      occupancyRate,
+      currentMonthRevenue,
+      targetMonthlyRevenue,
+      totalUnpaidAmount,
+      unpaidInvoicesCount,
+      electricityProfitTotal,
+      electricityTransactionsCount,
+      recentPayments: recentPayments.slice(0, 10),
+    };
   },
 };

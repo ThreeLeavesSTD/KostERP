@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Room, Tenant, TokenPaymentStatus } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { KostApiClient } from "@/lib/api-client";
 import { formatRupiah, formatTokenPLN, cleanTokenPLN } from "@/lib/utils";
 import { Zap, Calculator } from "lucide-react";
 import { notify } from "@/lib/notify";
@@ -33,14 +33,24 @@ export function TokenPurchaseModal({
 
   useEffect(() => {
     if (isOpen) {
-      const rooms = KostStorage.getRooms().filter((r) => r.status === "occupied");
-      setOccupiedRooms(rooms);
-      if (preselectedRoomId) {
-        setSelectedRoomId(preselectedRoomId);
-      } else if (rooms.length > 0) {
-        setSelectedRoomId(rooms[0].id);
-      }
+      let isMounted = true;
+      KostApiClient.getRooms()
+        .then((allRooms) => {
+          if (!isMounted) return;
+          const rooms = allRooms.filter((r) => r.status === "occupied");
+          setOccupiedRooms(rooms);
+          if (preselectedRoomId) {
+            setSelectedRoomId(preselectedRoomId);
+          } else if (rooms.length > 0) {
+            setSelectedRoomId(rooms[0].id);
+          }
+        })
+        .catch(() => {});
       setTokenCodeRaw("");
+
+      return () => {
+        isMounted = false;
+      };
     }
   }, [isOpen, preselectedRoomId]);
 
@@ -73,7 +83,7 @@ export function TokenPurchaseModal({
 
   const margin = Number(sellingPrice) - Number(costPrice);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRoomId) {
       notify.warning("Pilih Kamar", "Silakan pilih kamar penghuni terlebih dahulu.");
@@ -93,33 +103,31 @@ export function TokenPurchaseModal({
       return;
     }
 
-    const props = KostStorage.getProperties();
-    const property_id = props[0]?.id && props[0].id.includes("-") && props[0].id.length > 20
-      ? props[0].id
-      : "a0000000-0000-0000-0000-000000000001";
+    try {
+      const createdTx = await KostApiClient.createElectricityTransaction({
+        room_id: room.id,
+        tenant_id: room.current_tenant.id,
+        token_code: tokenCodeRaw,
+        nominal_amount: Number(nominalAmount),
+        kwh_units: Number(kwhUnits),
+        cost_price: Number(costPrice),
+        selling_price: Number(sellingPrice),
+        payment_status: paymentStatus,
+      });
 
-    const createdTx = KostStorage.addElectricityTransaction({
-      property_id,
-      room_id: room.id,
-      tenant_id: room.current_tenant.id,
-      lease_id: room.current_tenant.lease_id,
-      token_code: tokenCodeRaw,
-      nominal_amount: Number(nominalAmount),
-      kwh_units: Number(kwhUnits),
-      cost_price: Number(costPrice),
-      selling_price: Number(sellingPrice),
-      payment_status: paymentStatus,
-      room_number: room.room_number,
-      tenant_name: room.current_tenant.full_name,
-      tenant_phone: room.current_tenant.phone_number,
-    });
-
-    notify.success(
-      "Token PLN Disimpan",
-      `Token listrik untuk Kamar ${room.room_number} (${room.current_tenant.full_name}) berhasil dicatat.`
-    );
-    onSuccess(createdTx.id);
-    onClose();
+      notify.success(
+        "Token PLN Disimpan",
+        `Token listrik untuk Kamar ${room.room_number} (${room.current_tenant.full_name}) berhasil dicatat.`
+      );
+      onSuccess(createdTx.id);
+      onClose();
+    } catch (err: any) {
+      notify.alert({
+        title: "Gagal Menyimpan Token",
+        message: err.message || "Terjadi kesalahan pada database.",
+        variant: "danger",
+      });
+    }
   };
 
   return (

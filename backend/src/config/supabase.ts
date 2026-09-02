@@ -4,15 +4,20 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const supabaseUrl = process.env.SUPABASE_URL || "https://uvdjgajjcmznwuhvgzjp.supabase.co";
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || "";
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const anonKey = process.env.SUPABASE_ANON_KEY || "";
 
-if (!supabaseKey) {
-  console.warn("⚠️ Warning: Supabase key is missing in backend environment variables.");
+if (!serviceRoleKey && !anonKey) {
+  console.warn("⚠️ Warning: Supabase keys are missing in backend environment variables.");
 }
 
-export const supabase = createClient(supabaseUrl, supabaseKey, {
+// Client admin dengan Service Role Key (akses penuh bypass RLS, manajemen auth & webhooks)
+export const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey || anonKey, {
   auth: {
     persistSession: false,
     autoRefreshToken: false,
   },
 });
+
+// Alias default untuk kompatibilitas data access
+export const supabase = supabaseAdmin;

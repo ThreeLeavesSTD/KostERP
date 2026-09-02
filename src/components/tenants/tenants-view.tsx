@@ -17,7 +17,7 @@ import {
   DoorClosed,
 } from "lucide-react";
 import { Tenant, Lease, Room } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { KostApiClient } from "@/lib/api-client";
 import { formatRupiah, formatDateIndo } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { TenantFormModal } from "./tenant-form-modal";
@@ -38,17 +38,28 @@ export function TenantsView() {
   const [isLeaseModalOpen, setIsLeaseModalOpen] = useState(false);
   const [previewKtpUrl, setPreviewKtpUrl] = useState<string | null>(null);
 
-  const loadData = () => {
-    setTenants(KostStorage.getTenants());
-    setLeases(KostStorage.getLeases());
-    setRooms(KostStorage.getRooms());
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const [t, l, r] = await Promise.all([
+        KostApiClient.getTenants(),
+        KostApiClient.getLeases(),
+        KostApiClient.getRooms(),
+      ]);
+      setTenants(t);
+      setLeases(l);
+      setRooms(r);
+    } catch (err) {
+      console.error("Gagal memuat tenant/lease:", err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
     loadData();
-    const handleStorageChange = () => loadData();
-    window.addEventListener("kost_storage_change", handleStorageChange);
-    return () => window.removeEventListener("kost_storage_change", handleStorageChange);
   }, []);
 
   const filteredTenants = tenants.filter((t) => {
@@ -86,9 +97,13 @@ export function TenantsView() {
     });
 
     if (ok) {
-      KostStorage.deleteTenant(tenant.id);
-      loadData();
-      notify.deleted(tenant.full_name, "Penghuni");
+      try {
+        await KostApiClient.deleteTenant(tenant.id);
+        await loadData();
+        notify.deleted(tenant.full_name, "Penghuni");
+      } catch (err: any) {
+        notify.alert({ title: "Gagal Menghapus Penghuni", message: err.message, variant: "danger" });
+      }
     }
   };
 
@@ -102,9 +117,19 @@ export function TenantsView() {
     });
 
     if (ok) {
-      KostStorage.terminateLease(lease.id);
-      loadData();
-      notify.success("Check-out Berhasil", `Kontrak sewa Kamar ${lease.room_number} telah diselesaikan.`);
+      try {
+        await KostApiClient.updateLease(lease.id, {
+          status: "terminated",
+          end_date: new Date().toISOString().split("T")[0],
+        });
+        if (lease.room_id) {
+          await KostApiClient.updateRoom(lease.room_id, { status: "available" });
+        }
+        await loadData();
+        notify.success("Check-out Berhasil", `Kontrak sewa Kamar ${lease.room_number} telah diselesaikan.`);
+      } catch (err: any) {
+        notify.alert({ title: "Gagal Check-out", message: err.message, variant: "danger" });
+      }
     }
   };
 

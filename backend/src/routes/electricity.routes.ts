@@ -6,8 +6,19 @@ const router = Router();
 // GET /api/electricity
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const propertyId = req.query.property_id as string | undefined;
+    const role = req.auth?.role;
+    const propertyId = req.auth?.propertyId || (await SupabaseService.getDefaultPropertyId());
     const data = await SupabaseService.getElectricityTransactions(propertyId);
+
+    // Sembunyikan margin profit dan harga beli jika role cleaning_staff
+    if (role === "cleaning_staff") {
+      const sanitized = (data || []).map((e: any) => {
+        const { cost_price, profit_margin, ...rest } = e;
+        return rest;
+      });
+      return res.json({ success: true, data: sanitized });
+    }
+
     res.json({ success: true, data });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -17,7 +28,18 @@ router.get("/", async (req: Request, res: Response) => {
 // POST /api/electricity
 router.post("/", async (req: Request, res: Response) => {
   try {
-    const data = await SupabaseService.createElectricityTransaction(req.body);
+    const role = req.auth?.role;
+    if (role === "cleaning_staff") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden: Cleaning staff tidak memiliki hak mencatat transaksi token listrik.",
+      });
+    }
+    const propertyId = req.auth?.propertyId || (await SupabaseService.getDefaultPropertyId());
+    const data = await SupabaseService.createElectricityTransaction({
+      ...req.body,
+      property_id: propertyId,
+    });
     res.status(201).json({ success: true, data });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message });
@@ -27,6 +49,13 @@ router.post("/", async (req: Request, res: Response) => {
 // PUT /api/electricity/:id
 router.put("/:id", async (req: Request, res: Response) => {
   try {
+    const role = req.auth?.role;
+    if (role === "cleaning_staff") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden: Cleaning staff tidak memiliki hak mengubah data transaksi listrik.",
+      });
+    }
     const id = req.params.id as string;
     const data = await SupabaseService.updateElectricityTransaction(id, req.body);
     res.json({ success: true, data });

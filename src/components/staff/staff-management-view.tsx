@@ -33,7 +33,7 @@ import {
   Layers,
   Settings2,
 } from "lucide-react";
-import { KostStorage } from "@/lib/storage";
+import { KostApiClient } from "@/lib/api-client";
 import { StaffAccount, UserRole, RolePermissionConfig } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -142,16 +142,55 @@ export function StaffManagementView({
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [formShowPassword, setFormShowPassword] = useState(false);
 
-  const loadData = () => {
-    setStaffList(KostStorage.getStaffAccounts());
-    setRolesList(KostStorage.getRoles());
+  const loadData = async () => {
+    try {
+      const list = await KostApiClient.getStaff();
+      const mapped: StaffAccount[] = (list || []).map((u) => ({
+        id: u.id,
+        property_id: u.property_id || "",
+        full_name: u.full_name,
+        username: u.full_name.toLowerCase().replace(/\s+/g, "."),
+        password: "••••••••",
+        role: u.role,
+        phone_number: u.phone_number || "-",
+        is_active: u.is_active ?? true,
+        created_at: u.created_at || new Date().toISOString(),
+      }));
+      setStaffList(mapped);
+    } catch (err) {
+      console.error("Gagal memuat staff:", err);
+    }
+
+    setRolesList([
+      {
+        id: "owner",
+        name: "Owner",
+        description: "Pemilik properti dengan akses penuh ke seluruh fitur dan finansial",
+        badge_color: "lime",
+        is_system: true,
+        permissions: ["owner-dashboard", "ai-assistant", "rooms", "tenants", "electricity", "billing", "owner-audit", "billing-settings", "staff-management"],
+      },
+      {
+        id: "admin",
+        name: "Admin Pengelola",
+        description: "Operasional kamar, data penghuni, penagihan invoice, dan catat transaksi kas",
+        badge_color: "info",
+        is_system: true,
+        permissions: ["owner-dashboard", "ai-assistant", "rooms", "tenants", "electricity", "billing", "owner-audit", "billing-settings"],
+      },
+      {
+        id: "cleaning_staff",
+        name: "Cleaning & Maintenance Staff",
+        description: "Monitoring status kebersihan kamar dan respon komplain fasilitas kamar",
+        badge_color: "warning",
+        is_system: true,
+        permissions: ["rooms", "ai-assistant"],
+      },
+    ]);
   };
 
   useEffect(() => {
     loadData();
-    const handleStorageChange = () => loadData();
-    window.addEventListener("kost_storage_change", handleStorageChange);
-    return () => window.removeEventListener("kost_storage_change", handleStorageChange);
   }, []);
 
   // Access restriction: strictly owner
@@ -229,7 +268,7 @@ export function StaffManagementView({
     }
   };
 
-  const handleSaveStaff = (e: React.FormEvent) => {
+  const handleSaveStaff = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim() || !username.trim() || !password.trim()) {
       notify.warning("Data Belum Lengkap", "Mohon lengkapi Nama, Username, dan Password karyawan.");
@@ -237,64 +276,56 @@ export function StaffManagementView({
     }
 
     if (editingStaffId) {
-      KostStorage.updateStaffAccount(editingStaffId, {
-        full_name: fullName,
-        username: username.toLowerCase().trim(),
-        password: password.trim(),
-        role: selectedRole,
-        phone_number: phoneNumber,
-        email: email,
-        shift: shift,
-        notes: notes,
-        is_active: isActive,
-      });
-      notify.success("Akun Diperbarui", `Akun karyawan "${fullName}" berhasil disimpan.`);
+      try {
+        await KostApiClient.updateStaff(editingStaffId, {
+          full_name: fullName,
+          role: selectedRole,
+          phone_number: phoneNumber,
+          is_active: isActive,
+        });
+        notify.success("Akun Diperbarui", `Akun karyawan "${fullName}" berhasil disimpan.`);
+      } catch (err: any) {
+        notify.alert({ title: "Gagal Menyimpan Akun", message: err.message, variant: "danger" });
+      }
     } else {
-      KostStorage.addStaffAccount({
-        property_id: "a0000000-0000-0000-0000-000000000001",
-        full_name: fullName,
-        username: username.toLowerCase().trim(),
-        password: password.trim(),
-        role: selectedRole,
-        phone_number: phoneNumber,
-        email: email,
-        shift: shift,
-        notes: notes,
-        is_active: isActive,
-      });
-      notify.success("Akun Ditambahkan", `Akun karyawan "${fullName}" berhasil dibuat.`);
+      notify.info("Pendaftaran Akun Baru", "Staf baru dapat mendaftar langsung via form Sign Up di halaman login aplikasi.");
     }
 
     setIsStaffModalOpen(false);
-    loadData();
+    await loadData();
   };
 
   const handleDeleteStaff = async (id: string, name: string) => {
     const staff = staffList.find((s) => s.id === id);
-    const ok = await notify.confirmDelete({
-      title: `Hapus Akun Karyawan?`,
-      itemName: name,
-      itemType: "Akun Karyawan",
-      itemDetails: `Username: @${staff?.username || name.toLowerCase()} • Role: ${staff?.role || "Staf"}`,
-      message: `Apakah Anda yakin ingin menghapus akun staf "${name}"? Karyawan ini tidak akan dapat login lagi ke dalam sistem.`,
-      warningNote: "Kredensial login dan hak akses akun akan dicabut secara permanen.",
-      confirmText: "Hapus Akun Permanen",
+    const ok = await notify.confirm({
+      title: `Nonaktifkan Akun Karyawan?`,
+      message: `Akun staf "${name}" akan dinonaktifkan sehingga tidak dapat mengakses sistem.`,
+      variant: "warning",
+      confirmText: "Nonaktifkan Akun",
       cancelText: "Batalkan",
     });
     if (ok) {
-      KostStorage.deleteStaffAccount(id);
-      loadData();
-      notify.deleted(name, "Akun Karyawan");
+      try {
+        await KostApiClient.updateStaff(id, { is_active: false });
+        await loadData();
+        notify.info("Akun Dinonaktifkan", `Akun ${name} telah dinonaktifkan.`);
+      } catch (err: any) {
+        notify.alert({ title: "Gagal Mengubah Status", message: err.message, variant: "danger" });
+      }
     }
   };
 
-  const handleToggleActive = (staff: StaffAccount) => {
-    KostStorage.updateStaffAccount(staff.id, { is_active: !staff.is_active });
-    loadData();
-    notify.info(
-      "Status Akun Diubah",
-      `Akun ${staff.full_name} kini ${!staff.is_active ? "Aktif" : "Dinonaktifkan"}.`
-    );
+  const handleToggleActive = async (staff: StaffAccount) => {
+    try {
+      await KostApiClient.updateStaff(staff.id, { is_active: !staff.is_active });
+      await loadData();
+      notify.info(
+        "Status Akun Diubah",
+        `Akun ${staff.full_name} kini ${!staff.is_active ? "Aktif" : "Dinonaktifkan"}.`
+      );
+    } catch (err: any) {
+      notify.alert({ title: "Gagal Mengubah Status", message: err.message, variant: "danger" });
+    }
   };
 
   const togglePasswordVisibility = (id: string) => {
@@ -362,26 +393,28 @@ Mohon simpan username dan password ini dengan baik. Terima kasih! 🙏`;
     }
 
     if (editingRoleId) {
-      KostStorage.updateRole(editingRoleId, {
-        name: roleName,
-        description: roleDesc,
-        badge_color: roleColor,
-        permissions: rolePermissions,
-      });
+      setRolesList((prev) =>
+        prev.map((r) =>
+          r.id === editingRoleId
+            ? { ...r, name: roleName, description: roleDesc, badge_color: roleColor, permissions: rolePermissions }
+            : r
+        )
+      );
       notify.success("Role Diperbarui", `Role "${roleName}" berhasil diperbarui.`);
     } else {
-      KostStorage.addRole({
+      const newRoleObj: RolePermissionConfig = {
+        id: `role-${Date.now()}`,
         name: roleName,
         description: roleDesc,
         badge_color: roleColor,
         is_system: false,
         permissions: rolePermissions,
-      });
+      };
+      setRolesList((prev) => [...prev, newRoleObj]);
       notify.success("Role Ditambahkan", `Role "${roleName}" berhasil dibuat.`);
     }
 
     setIsRoleModalOpen(false);
-    loadData();
   };
 
   const handleDeleteRole = async (roleItem: RolePermissionConfig) => {
@@ -404,8 +437,7 @@ Mohon simpan username dan password ini dengan baik. Terima kasih! 🙏`;
       cancelText: "Batalkan",
     });
     if (ok) {
-      KostStorage.deleteRole(roleItem.id);
-      loadData();
+      setRolesList((prev) => prev.filter((r) => r.id !== roleItem.id));
       notify.deleted(roleItem.name, "Custom Role");
     }
   };

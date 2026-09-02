@@ -38,6 +38,7 @@ import {
 } from "./mock-data";
 import { FrontendSupabaseService } from "./supabase-service";
 import { KostApiClient } from "./api-client";
+import { getPermissionsForRole, hasPermission as checkStaticPermission } from "./permissions";
 
 const STORAGE_KEYS = {
   PROPERTIES: "kost_erp_properties",
@@ -883,48 +884,14 @@ export const KostStorage = {
     return updated;
   },
 
-  // AUTHENTICATION HELPER
+  // AUTHENTICATION HELPER (DEPRECATED - Gantikan dengan Supabase Auth)
   authenticate: (
-    usernameInput: string,
-    passwordInput: string
+    _usernameInput?: string,
+    _passwordInput?: string
   ): { success: boolean; role?: UserRole; message?: string; staff?: StaffAccount } => {
-    const u = usernameInput.trim().toLowerCase();
-    const p = passwordInput.trim();
-
-    // 1. Owner check
-    if (u === "owner" && p === "owner123") {
-      return { success: true, role: "owner" };
-    }
-
-    // 2. Staff accounts check from storage
-    const staffList = KostStorage.getStaffAccounts();
-    const matchedStaff = staffList.find(
-      (s) => s.username.toLowerCase() === u && s.password === p
-    );
-
-    if (matchedStaff) {
-      if (!matchedStaff.is_active) {
-        return {
-          success: false,
-          message: "Akun karyawan ini sedang dinonaktifkan oleh Owner.",
-        };
-      }
-
-      // Update last login timestamp
-      KostStorage.updateStaffAccount(matchedStaff.id, {
-        last_login: new Date().toISOString(),
-      });
-
-      return {
-        success: true,
-        role: matchedStaff.role,
-        staff: matchedStaff,
-      };
-    }
-
     return {
       success: false,
-      message: "Username atau password salah. Silakan periksa kembali kredensial Anda.",
+      message: "Autentikasi lokal dinonaktifkan. Silakan gunakan Supabase Auth (Email & Password).",
     };
   },
 
@@ -977,31 +944,11 @@ export const KostStorage = {
   },
 
   hasPermission: (roleId: string, permissionTab: string): boolean => {
-    if (roleId === "owner") return true;
-    const roles = KostStorage.getRoles();
-    const role = roles.find((r) => r.id === roleId);
-    if (!role) return false;
-    return role.permissions.includes(permissionTab);
+    return checkStaticPermission(roleId, permissionTab);
   },
 
   getRolePermissions: (roleId: string): string[] => {
-    if (roleId === "owner") {
-      return [
-        "owner-dashboard",
-        "ai-assistant",
-        "staff-management",
-        "rooms",
-        "tenants",
-        "electricity",
-        "billing",
-        "owner-audit",
-        "billing-settings",
-        "profile",
-      ];
-    }
-    const roles = KostStorage.getRoles();
-    const role = roles.find((r) => r.id === roleId);
-    return role ? role.permissions : ["profile"];
+    return getPermissionsForRole(roleId);
   },
 
   // ROOM COMPLAINTS (WHATSAPP CS AI & SUPABASE DB RECORD)

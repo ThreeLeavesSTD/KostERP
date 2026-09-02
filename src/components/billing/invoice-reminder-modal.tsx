@@ -4,8 +4,8 @@ import React, { useState, useEffect } from "react";
 import { Send, Copy, Check, ExternalLink, MessageSquare, Clock, Sparkles, AlertTriangle, ShieldAlert } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
-import { Invoice } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { Invoice, PaymentMethodConfig } from "@/types";
+import { KostApiClient } from "@/lib/api-client";
 import { formatDateIndo, formatRupiah } from "@/lib/utils";
 import { WhatsAppTemplates, ReminderStage, sendWebhookToN8n } from "@/lib/n8n/webhook-client";
 import { notify } from "@/lib/notify";
@@ -49,30 +49,37 @@ export function InvoiceReminderModal({
 
       setStage(initialStage);
 
-      const paymentAccounts = KostStorage.getPaymentMethods();
-      const generated = WhatsAppTemplates.invoiceReminder(
-        {
-          tenant_name: invoice.tenant_name || "Penghuni",
-          tenant_phone: invoice.tenant_phone || "",
-          room_number: invoice.room_number || "-",
-          invoice_number: invoice.invoice_number,
-          due_date: formatDateIndo(invoice.due_date),
-          subtotal_rent: invoice.subtotal_rent,
-          additional_fees: invoice.additional_fees,
-          total_amount: invoice.total_amount,
-          payment_accounts: paymentAccounts,
-        },
-        initialStage
-      );
-      setCustomText(generated);
+      KostApiClient.getPaymentMethods()
+        .then((paymentAccounts) => {
+          const generated = WhatsAppTemplates.invoiceReminder(
+            {
+              tenant_name: invoice.tenant_name || "Penghuni",
+              tenant_phone: invoice.tenant_phone || "",
+              room_number: invoice.room_number || "-",
+              invoice_number: invoice.invoice_number,
+              due_date: formatDateIndo(invoice.due_date),
+              subtotal_rent: invoice.subtotal_rent,
+              additional_fees: invoice.additional_fees,
+              total_amount: invoice.total_amount,
+              payment_accounts: paymentAccounts,
+            },
+            initialStage
+          );
+          setCustomText(generated);
+        })
+        .catch(() => {});
     }
   }, [invoice, isOpen]);
 
-  const handleSelectStage = (newStage: ReminderStage) => {
+  const handleSelectStage = async (newStage: ReminderStage) => {
     setStage(newStage);
     if (!invoice) return;
 
-    const paymentAccounts = KostStorage.getPaymentMethods();
+    let paymentAccounts: PaymentMethodConfig[] = [];
+    try {
+      paymentAccounts = await KostApiClient.getPaymentMethods();
+    } catch {}
+
     const generated = WhatsAppTemplates.invoiceReminder(
       {
         tenant_name: invoice.tenant_name || "Penghuni",
@@ -100,7 +107,11 @@ export function InvoiceReminderModal({
     if (!invoice) return;
     setIsSending(true);
 
-    const paymentAccounts = KostStorage.getPaymentMethods();
+    let paymentAccounts: PaymentMethodConfig[] = [];
+    try {
+      paymentAccounts = await KostApiClient.getPaymentMethods();
+    } catch {}
+
     const webhookUrl =
       process.env.NEXT_PUBLIC_N8N_WEBHOOK_INVOICE_REMINDER ||
       "https://n8n.webhook.internal/invoice-reminder";
@@ -122,8 +133,12 @@ export function InvoiceReminderModal({
       payload,
     });
 
-    // Record in local storage
-    KostStorage.recordInvoiceReminder(invoice.id, stage);
+    try {
+      await KostApiClient.updateInvoice(invoice.id, {
+        reminder_count: (invoice.reminder_count || 0) + 1,
+        last_reminder_at: new Date().toISOString(),
+      });
+    } catch {}
 
     setIsSending(false);
     notify.success(

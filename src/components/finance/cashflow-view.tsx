@@ -26,8 +26,8 @@ import {
   Building2,
   Scan,
 } from "lucide-react";
-import { CashTransaction, TransactionType, UserRole, FinanceWallet, WalletKind, FinanceCategory } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { FinanceWallet, CashTransaction, UserRole, WalletKind, FinanceCategory } from "@/types";
+import { KostApiClient } from "@/lib/api-client";
 import { formatRupiah, formatDateIndo } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -72,20 +72,40 @@ export function CashFlowView({ currentRole = "owner" }: CashFlowViewProps) {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [walletFilter, setWalletFilter] = useState("all");
 
-  const loadData = () => {
-    const list = KostStorage.getCashTransactions();
-    const wals = KostStorage.getWallets();
-    const balances = KostStorage.getWalletBalances();
-    setTransactions(list);
-    setWallets(wals);
-    setWalletBalances(balances);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const [list, wals] = await Promise.all([
+        KostApiClient.getCashTransactions(),
+        KostApiClient.getWallets(),
+      ]);
+
+      const balances = wals.map((w) => {
+        const txs = list.filter((tx) => tx.wallet_id === w.id || tx.payment_method === w.name);
+        let income = 0;
+        let expense = 0;
+        txs.forEach((tx) => {
+          if (tx.type === "income") income += tx.amount;
+          else expense += tx.amount;
+        });
+        const balance = (w.initial_balance || 0) + income - expense;
+        return { wallet: w, balance, totalIncome: income, totalExpense: expense };
+      });
+
+      setTransactions(list);
+      setWallets(wals);
+      setWalletBalances(balances);
+    } catch (err) {
+      console.error("Gagal memuat data keuangan:", err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
     loadData();
-    const handleStorageChange = () => loadData();
-    window.addEventListener("kost_storage_change", handleStorageChange);
-    return () => window.removeEventListener("kost_storage_change", handleStorageChange);
   }, []);
 
   // Assets and Liabilities Separation
@@ -159,9 +179,13 @@ export function CashFlowView({ currentRole = "owner" }: CashFlowViewProps) {
       cancelText: "Batalkan",
     });
     if (ok) {
-      KostStorage.deleteCashTransaction(tx.id);
-      loadData();
-      notify.deleted(tx.title, "Transaksi");
+      try {
+        await KostApiClient.deleteCashTransaction(tx.id);
+        await loadData();
+        notify.deleted(tx.title, "Transaksi");
+      } catch (err: any) {
+        notify.alert({ title: "Gagal Menghapus Transaksi", message: err.message, variant: "danger" });
+      }
     }
   };
 

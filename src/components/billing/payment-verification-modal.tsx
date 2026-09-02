@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Invoice } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { KostApiClient } from "@/lib/api-client";
 import { formatRupiah } from "@/lib/utils";
 import {
   WhatsAppTemplates,
@@ -62,28 +62,32 @@ export function PaymentVerificationModal({
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    KostStorage.verifyPayment({
-      invoice_id: invoice.id,
-      amount_paid: invoice.total_amount,
-      payment_method: paymentMethod,
-      proof_url: proofUrl,
-      verified_by: verifiedBy,
-      notes,
-    });
+    try {
+      await KostApiClient.recordPayment({
+        invoice_id: invoice.id,
+        amount_paid: invoice.total_amount,
+        payment_method: paymentMethod,
+        proof_url: proofUrl,
+        verified_by: verifiedBy,
+        notes,
+      });
 
-    // Optionally trigger n8n receipt webhook
-    const webhookUrl =
-      process.env.NEXT_PUBLIC_N8N_WEBHOOK_PAYMENT_RECEIPT ||
-      "https://n8n.webhook.internal/payment-receipt";
+      // Optionally trigger n8n receipt webhook
+      const webhookUrl =
+        process.env.NEXT_PUBLIC_N8N_WEBHOOK_PAYMENT_RECEIPT ||
+        "https://n8n.webhook.internal/payment-receipt";
 
-    sendWebhookToN8n(webhookUrl, {
-      event: "payment.verified",
-      payload: receiptPayload,
-      formatted_message: receiptMessage,
-    });
+      sendWebhookToN8n(webhookUrl, {
+        event: "payment.verified",
+        payload: receiptPayload,
+        formatted_message: receiptMessage,
+      });
 
-    onSuccess();
-    onClose();
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      alert(`Gagal memverifikasi pembayaran: ${err.message}`);
+    }
   };
 
   return (

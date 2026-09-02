@@ -18,7 +18,7 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { FinanceWallet, FinanceCategory, TransactionType } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { KostApiClient } from "@/lib/api-client";
 import { formatRupiah } from "@/lib/utils";
 import { notify } from "@/lib/notify";
 
@@ -48,9 +48,17 @@ export function ManageWalletsCategoriesModal({
   // New Category Form
   const [newCategoryName, setNewCategoryName] = useState("");
 
-  const loadData = () => {
-    setWallets(KostStorage.getWallets());
-    setCategories(KostStorage.getFinanceCategories());
+  const loadData = async () => {
+    try {
+      const [w, c] = await Promise.all([
+        KostApiClient.getWallets(),
+        KostApiClient.getFinanceCategories(),
+      ]);
+      setWallets(w);
+      setCategories(c);
+    } catch (err) {
+      console.error("Gagal memuat wallet/categories:", err);
+    }
   };
 
   useEffect(() => {
@@ -59,26 +67,28 @@ export function ManageWalletsCategoriesModal({
     }
   }, [isOpen]);
 
-  const handleAddWallet = (e: React.FormEvent) => {
+  const handleAddWallet = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newWalletName.trim()) return;
 
-    const props = KostStorage.getProperties();
-    KostStorage.addWallet({
-      property_id: props[0]?.id || "prop-01",
-      name: newWalletName.trim(),
-      wallet_kind: "asset",
-      type: newWalletType,
-      account_number: newWalletAccount.trim() || undefined,
-      initial_balance: Number(newWalletBalance) || 0,
-      color: newWalletType === "cash" ? "#D9FF43" : newWalletType === "bank" ? "#3B82F6" : "#10B981",
-    });
+    try {
+      await KostApiClient.createWallet({
+        name: newWalletName.trim(),
+        wallet_kind: "asset",
+        type: newWalletType,
+        account_number: newWalletAccount.trim() || undefined,
+        initial_balance: Number(newWalletBalance) || 0,
+        color: newWalletType === "cash" ? "#D9FF43" : newWalletType === "bank" ? "#3B82F6" : "#10B981",
+      });
 
-    setNewWalletName("");
-    setNewWalletAccount("");
-    setNewWalletBalance(0);
-    loadData();
-    onUpdate();
+      setNewWalletName("");
+      setNewWalletAccount("");
+      setNewWalletBalance(0);
+      await loadData();
+      onUpdate();
+    } catch (err: any) {
+      notify.alert({ title: "Gagal Tambah Dompet", message: err.message, variant: "danger" });
+    }
   };
 
   const handleDeleteWallet = async (wallet: FinanceWallet) => {
@@ -93,27 +103,36 @@ export function ManageWalletsCategoriesModal({
       cancelText: "Batalkan",
     });
     if (ok) {
-      KostStorage.deleteWallet(wallet.id);
-      loadData();
-      onUpdate();
-      notify.deleted(wallet.name, "Dompet");
+      try {
+        await KostApiClient.deleteWallet(wallet.id);
+        await loadData();
+        onUpdate();
+        notify.deleted(wallet.name, "Dompet");
+      } catch (err: any) {
+        notify.alert({ title: "Gagal Menghapus Dompet", message: err.message, variant: "danger" });
+      }
     }
   };
 
-  const handleAddCategory = (e: React.FormEvent) => {
+  const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCategoryName.trim()) return;
 
-    KostStorage.addFinanceCategory({
-      name: newCategoryName.trim(),
-      type: categoryType,
-      is_default: false,
-    });
+    try {
+      await KostApiClient.createFinanceCategory({
+        name: newCategoryName.trim(),
+        type: categoryType,
+        is_default: false,
+      });
 
-    setNewCategoryName("");
-    loadData();
-    onUpdate();
-    notify.success("Kategori Ditambahkan", `Kategori "${newCategoryName.trim()}" berhasil dibuat.`);
+      const catName = newCategoryName.trim();
+      setNewCategoryName("");
+      await loadData();
+      onUpdate();
+      notify.success("Kategori Ditambahkan", `Kategori "${catName}" berhasil dibuat.`);
+    } catch (err: any) {
+      notify.alert({ title: "Gagal Tambah Kategori", message: err.message, variant: "danger" });
+    }
   };
 
   const handleDeleteCategory = async (cat: FinanceCategory) => {
@@ -128,15 +147,19 @@ export function ManageWalletsCategoriesModal({
       cancelText: "Batalkan",
     });
     if (ok) {
-      KostStorage.deleteFinanceCategory(cat.id);
-      loadData();
-      onUpdate();
-      notify.deleted(cat.name, "Kategori");
+      try {
+        await KostApiClient.deleteFinanceCategory(cat.id);
+        await loadData();
+        onUpdate();
+        notify.deleted(cat.name, "Kategori");
+      } catch (err: any) {
+        notify.alert({ title: "Gagal Menghapus Kategori", message: err.message, variant: "danger" });
+      }
     }
   };
 
   const filteredCategories = categories.filter((c) => c.type === categoryType);
-  const walletBalances = KostStorage.getWalletBalances();
+  const walletBalances: any[] = [];
 
   return (
     <Modal

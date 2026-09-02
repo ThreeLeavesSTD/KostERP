@@ -17,7 +17,7 @@ import {
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { FinanceWallet, WalletKind, FinanceCategory } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { KostApiClient } from "@/lib/api-client";
 import { formatRupiah } from "@/lib/utils";
 import { notify } from "@/lib/notify";
 
@@ -58,72 +58,79 @@ export function WalletModal({
 
   useEffect(() => {
     if (isOpen) {
-      const cats = KostStorage.getFinanceCategories(walletToEdit ? walletToEdit.wallet_kind : defaultKind);
-      setCategories(cats);
+      let isMounted = true;
+      KostApiClient.getFinanceCategories()
+        .then((cats) => {
+          if (!isMounted) return;
+          setCategories(cats);
+        })
+        .catch(() => {});
 
       if (walletToEdit) {
         setWalletKind(walletToEdit.wallet_kind || "asset");
         setName(walletToEdit.name);
-        setCategoryName(walletToEdit.category_name || (cats[0]?.name || "Business"));
+        setCategoryName(walletToEdit.category_name || "Business");
         setBalance(walletToEdit.initial_balance || 0);
         setSelectedIcon(walletToEdit.icon || "payments");
         setAccountNumber(walletToEdit.account_number || "");
       } else {
         setWalletKind(defaultKind);
         setName("");
-        setCategoryName(cats[0]?.name || (defaultKind === "asset" ? "Business" : "Hutang Vendor"));
+        setCategoryName(defaultKind === "asset" ? "Business" : "Hutang Vendor");
         setBalance(0);
         setSelectedIcon(defaultKind === "asset" ? "payments" : "liability");
         setAccountNumber("");
       }
       setShowIconPicker(false);
+
+      return () => {
+        isMounted = false;
+      };
     }
   }, [isOpen, walletToEdit, defaultKind]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       notify.warning("Nama Akun Diperlukan", "Nama dompet atau rekening kas wajib diisi.");
       return;
     }
 
-    const props = KostStorage.getProperties();
-    const property_id = props[0]?.id && props[0].id.includes("-") && props[0].id.length > 20
-      ? props[0].id
-      : "a0000000-0000-0000-0000-000000000001";
-
     let type: "cash" | "bank" | "ewallet" | "other" = "bank";
     if (selectedIcon === "cash" || categoryName.toLowerCase().includes("cash")) type = "cash";
     else if (selectedIcon === "ewallet" || categoryName.toLowerCase().includes("wallet") || name.toLowerCase().includes("ovo") || name.toLowerCase().includes("gopay")) type = "ewallet";
 
-    if (walletToEdit) {
-      KostStorage.updateWallet(walletToEdit.id, {
-        name: name.trim(),
-        wallet_kind: walletKind,
-        category_name: categoryName,
-        initial_balance: Number(balance),
-        icon: selectedIcon,
-        account_number: accountNumber.trim() || undefined,
-        type,
-      });
-      notify.success("Akun Diperbarui", `Akun "${name.trim()}" berhasil disimpan.`);
-    } else {
-      KostStorage.addWallet({
-        property_id,
-        name: name.trim(),
-        wallet_kind: walletKind,
-        category_name: categoryName,
-        initial_balance: Number(balance),
-        icon: selectedIcon,
-        account_number: accountNumber.trim() || undefined,
-        type,
-        color: walletKind === "asset" ? "#D9FF43" : "#F43F5E",
-      });
-      notify.success("Akun Dibuat", `Akun "${name.trim()}" berhasil ditambahkan ke daftar rekening.`);
-    }
+    try {
+      if (walletToEdit) {
+        await KostApiClient.updateWallet(walletToEdit.id, {
+          name: name.trim(),
+          wallet_kind: walletKind,
+          category_name: categoryName,
+          initial_balance: Number(balance),
+          icon: selectedIcon,
+          account_number: accountNumber.trim() || undefined,
+          type,
+        });
+        notify.success("Akun Diperbarui", `Akun "${name.trim()}" berhasil disimpan.`);
+      } else {
+        await KostApiClient.createWallet({
+          name: name.trim(),
+          wallet_kind: walletKind,
+          category_name: categoryName,
+          initial_balance: Number(balance),
+          icon: selectedIcon,
+          account_number: accountNumber.trim() || undefined,
+          type,
+          color: walletKind === "asset" ? "#D9FF43" : "#F43F5E",
+        });
+        notify.success("Akun Dibuat", `Akun "${name.trim()}" berhasil ditambahkan ke daftar rekening.`);
+      }
 
-    onSuccess();
-    onClose();
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      notify.alert({ title: "Gagal Menyimpan Akun", message: err.message, variant: "danger" });
+    }
   };
 
   const handleDelete = async () => {
@@ -139,10 +146,14 @@ export function WalletModal({
       cancelText: "Batalkan",
     });
     if (ok) {
-      KostStorage.deleteWallet(walletToEdit.id);
-      notify.deleted(walletToEdit.name, "Akun Keuangan");
-      onSuccess();
-      onClose();
+      try {
+        await KostApiClient.deleteWallet(walletToEdit.id);
+        notify.deleted(walletToEdit.name, "Akun Keuangan");
+        onSuccess();
+        onClose();
+      } catch (err: any) {
+        notify.alert({ title: "Gagal Menghapus Akun", message: err.message, variant: "danger" });
+      }
     }
   };
 

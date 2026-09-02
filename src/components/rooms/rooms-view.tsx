@@ -19,7 +19,7 @@ import {
   FileText,
 } from "lucide-react";
 import { Room, RoomStatus, RoomComplaint } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { KostApiClient } from "@/lib/api-client";
 import { formatRupiah, getRoomStatusInfo } from "@/lib/utils";
 import { notify } from "@/lib/notify";
 import { RoomModal } from "./room-modal";
@@ -47,16 +47,26 @@ export function RoomsView({
   const [isComplaintsModalOpen, setIsComplaintsModalOpen] = useState(false);
   const [selectedRoomForComplaints, setSelectedRoomForComplaints] = useState<string | undefined>(undefined);
 
-  const loadData = () => {
-    setRooms(KostStorage.getRooms());
-    setComplaints(KostStorage.getComplaints());
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const [r, c] = await Promise.all([
+        KostApiClient.getRooms(),
+        KostApiClient.getComplaints(),
+      ]);
+      setRooms(r);
+      setComplaints(c);
+    } catch (err) {
+      console.error("Gagal memuat kamar:", err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
     loadData();
-    const handleStorageChange = () => loadData();
-    window.addEventListener("kost_storage_change", handleStorageChange);
-    return () => window.removeEventListener("kost_storage_change", handleStorageChange);
   }, []);
 
   const floors = Array.from(new Set(rooms.map((r) => r.floor))).sort((a, b) => a - b);
@@ -120,19 +130,27 @@ export function RoomsView({
     });
 
     if (ok) {
-      KostStorage.deleteRoom(room.id);
-      loadData();
-      notify.deleted(`Kamar ${room.room_number}`, "Kamar");
+      try {
+        await KostApiClient.deleteRoom(room.id);
+        await loadData();
+        notify.deleted(`Kamar ${room.room_number}`, "Kamar");
+      } catch (err: any) {
+        notify.alert({ title: "Gagal Menghapus Kamar", message: err.message || "Terjadi kesalahan pada database.", variant: "danger" });
+      }
     }
   };
 
-  const handleQuickStatusChange = (room: Room, newStatus: RoomStatus) => {
-    KostStorage.updateRoom(room.id, { status: newStatus });
-    loadData();
-    notify.info(
-      "Status Kamar Diperbarui",
-      `Kamar ${room.room_number} kini berstatus ${newStatus === "available" ? "Siap Huni" : newStatus === "occupied" ? "Terisi" : "Maintenance"}.`
-    );
+  const handleQuickStatusChange = async (room: Room, newStatus: RoomStatus) => {
+    try {
+      await KostApiClient.updateRoom(room.id, { status: newStatus });
+      await loadData();
+      notify.info(
+        "Status Kamar Diperbarui",
+        `Kamar ${room.room_number} kini berstatus ${newStatus === "available" ? "Siap Huni" : newStatus === "occupied" ? "Terisi" : "Maintenance"}.`
+      );
+    } catch (err: any) {
+      notify.alert({ title: "Gagal Memperbarui Status", message: err.message || "Terjadi kesalahan pada database.", variant: "danger" });
+    }
   };
 
   const handleOpenRoomComplaints = (roomNum?: string) => {

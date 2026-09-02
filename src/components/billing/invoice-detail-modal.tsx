@@ -4,8 +4,8 @@ import React, { useRef } from "react";
 import { Printer, Share2, Copy, Check, CheckCircle2, Clock, AlertCircle, Building2, MapPin, Phone, Receipt } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
-import { Invoice } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { Invoice, PaymentMethodConfig, Property } from "@/types";
+import { KostApiClient } from "@/lib/api-client";
 import { formatDateIndo, formatRupiah } from "@/lib/utils";
 
 interface InvoiceDetailModalProps {
@@ -23,17 +23,31 @@ export function InvoiceDetailModal({
 }: InvoiceDetailModalProps) {
   const printRef = useRef<HTMLDivElement>(null);
   const [isCopied, setIsCopied] = React.useState(false);
-
-  if (!invoice) return null;
-
-  const props = KostStorage.getProperties();
-  const property = props[0] || {
+  const [property, setProperty] = React.useState<Partial<Property>>({
     name: "Kost Putri Graha Asri",
     address: "Jl. Margonda Raya No. 45, Beji, Depok",
     phone: "+6281234567890",
-  };
+  });
+  const [paymentAccounts, setPaymentAccounts] = React.useState<PaymentMethodConfig[]>([]);
 
-  const paymentAccounts = KostStorage.getPaymentMethods().filter((p) => p.is_active);
+  React.useEffect(() => {
+    if (isOpen) {
+      KostApiClient.getProperties()
+        .then((props) => {
+          if (props[0]) setProperty(props[0]);
+        })
+        .catch(() => {});
+
+      KostApiClient.getPaymentMethods()
+        .then((methods) => {
+          setPaymentAccounts(methods.filter((p) => p.is_active));
+        })
+        .catch(() => {});
+    }
+  }, [isOpen]);
+
+  if (!invoice) return null;
+
   const isPaid = invoice.status === "paid";
   const isOverdue = invoice.status === "overdue";
 

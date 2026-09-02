@@ -16,7 +16,7 @@ import {
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { CashTransaction, TransactionType, FinanceWallet, FinanceCategory } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { KostApiClient } from "@/lib/api-client";
 import { formatRupiah } from "@/lib/utils";
 import { notify } from "@/lib/notify";
 
@@ -55,98 +55,121 @@ export function CashTransactionModal({
   const [newWalletInitialBalance, setNewWalletInitialBalance] = useState<number>(0);
   const [newWalletType, setNewWalletType] = useState<"cash" | "bank" | "ewallet">("cash");
 
-  const refreshLists = (currentType: TransactionType) => {
-    const cats = KostStorage.getFinanceCategories(currentType);
-    const wals = KostStorage.getWallets();
-    setCategoriesList(cats);
-    setWalletsList(wals);
+  const refreshLists = async (currentType: TransactionType) => {
+    try {
+      const [cats, wals] = await Promise.all([
+        KostApiClient.getFinanceCategories(),
+        KostApiClient.getWallets(),
+      ]);
+      const filteredCats = cats.filter((c) => c.type === currentType);
+      setCategoriesList(filteredCats);
+      setWalletsList(wals);
 
-    if (!categoryName && cats.length > 0) {
-      setCategoryName(cats[0].name);
-    }
-    if (!selectedWalletId && wals.length > 0) {
-      setSelectedWalletId(wals[0].id);
-    }
+      if (!categoryName && filteredCats.length > 0) {
+        setCategoryName(filteredCats[0].name);
+      }
+      if (!selectedWalletId && wals.length > 0) {
+        setSelectedWalletId(wals[0].id);
+      }
+    } catch {}
   };
 
   useEffect(() => {
     if (isOpen) {
+      let isMounted = true;
       const initialType = transactionToEdit ? transactionToEdit.type : "expense";
       setType(initialType);
-      const cats = KostStorage.getFinanceCategories(initialType);
-      const wals = KostStorage.getWallets();
-      setCategoriesList(cats);
-      setWalletsList(wals);
 
-      if (transactionToEdit) {
-        setCategoryName(transactionToEdit.category_name || transactionToEdit.category || (cats[0]?.name || ""));
-        setSelectedWalletId(transactionToEdit.wallet_id || (wals[0]?.id || ""));
-        setTitle(transactionToEdit.title);
-        setAmount(transactionToEdit.amount);
-        setDate(transactionToEdit.date);
-        setNotes(transactionToEdit.notes || "");
-      } else {
-        setCategoryName(cats[0]?.name || "");
-        setSelectedWalletId(wals[0]?.id || "");
-        setTitle("");
-        setAmount(100000);
-        setDate(new Date().toISOString().slice(0, 10));
-        setNotes("");
-      }
+      Promise.all([KostApiClient.getFinanceCategories(), KostApiClient.getWallets()])
+        .then(([cats, wals]) => {
+          if (!isMounted) return;
+          const filteredCats = cats.filter((c) => c.type === initialType);
+          setCategoriesList(filteredCats);
+          setWalletsList(wals);
+
+          if (transactionToEdit) {
+            setCategoryName(transactionToEdit.category_name || transactionToEdit.category || (filteredCats[0]?.name || ""));
+            setSelectedWalletId(transactionToEdit.wallet_id || (wals[0]?.id || ""));
+            setTitle(transactionToEdit.title);
+            setAmount(transactionToEdit.amount);
+            setDate(transactionToEdit.date);
+            setNotes(transactionToEdit.notes || "");
+          } else {
+            setCategoryName(filteredCats[0]?.name || "");
+            setSelectedWalletId(wals[0]?.id || "");
+            setTitle("");
+            setAmount(100000);
+            setDate(new Date().toISOString().slice(0, 10));
+            setNotes("");
+          }
+        })
+        .catch(() => {});
+
       setShowAddCategoryInput(false);
       setShowAddWalletInput(false);
+
+      return () => {
+        isMounted = false;
+      };
     }
   }, [transactionToEdit, isOpen]);
 
-  const handleTypeChange = (newType: TransactionType) => {
+  const handleTypeChange = async (newType: TransactionType) => {
     setType(newType);
-    const cats = KostStorage.getFinanceCategories(newType);
-    setCategoriesList(cats);
-    if (cats.length > 0) {
-      setCategoryName(cats[0].name);
-    }
+    try {
+      const cats = await KostApiClient.getFinanceCategories();
+      const filtered = cats.filter((c) => c.type === newType);
+      setCategoriesList(filtered);
+      if (filtered.length > 0) {
+        setCategoryName(filtered[0].name);
+      }
+    } catch {}
   };
 
-  const handleCreateNewCategory = (e: React.FormEvent) => {
+  const handleCreateNewCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCategoryName.trim()) return;
 
-    const created = KostStorage.addFinanceCategory({
-      name: newCategoryName.trim(),
-      type,
-      is_default: false,
-    });
+    try {
+      const created = await KostApiClient.createFinanceCategory({
+        name: newCategoryName.trim(),
+        type,
+        is_default: false,
+      });
 
-    const updatedCats = KostStorage.getFinanceCategories(type);
-    setCategoriesList(updatedCats);
-    setCategoryName(created.name);
-    setNewCategoryName("");
-    setShowAddCategoryInput(false);
+      await refreshLists(type);
+      setCategoryName(created.name);
+      setNewCategoryName("");
+      setShowAddCategoryInput(false);
+    } catch (err: any) {
+      notify.alert({ title: "Gagal Tambah Kategori", message: err.message, variant: "danger" });
+    }
   };
 
-  const handleCreateNewWallet = (e: React.FormEvent) => {
+  const handleCreateNewWallet = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newWalletName.trim()) return;
 
-    const props = KostStorage.getProperties();
-    const created = KostStorage.addWallet({
-      property_id: props[0]?.id || "prop-01",
-      name: newWalletName.trim(),
-      wallet_kind: "asset",
-      type: newWalletType,
-      initial_balance: Number(newWalletInitialBalance) || 0,
-      color: newWalletType === "cash" ? "#D9FF43" : newWalletType === "bank" ? "#3B82F6" : "#10B981",
-    });
+    try {
+      const created = await KostApiClient.createWallet({
+        name: newWalletName.trim(),
+        wallet_kind: "asset",
+        type: newWalletType,
+        initial_balance: Number(newWalletInitialBalance) || 0,
+        color: newWalletType === "cash" ? "#D9FF43" : newWalletType === "bank" ? "#3B82F6" : "#10B981",
+      });
 
-    const updatedWallets = KostStorage.getWallets();
-    setWalletsList(updatedWallets);
-    setSelectedWalletId(created.id);
-    setNewWalletName("");
-    setNewWalletInitialBalance(0);
-    setShowAddWalletInput(false);
+      await refreshLists(type);
+      setSelectedWalletId(created.id);
+      setNewWalletName("");
+      setNewWalletInitialBalance(0);
+      setShowAddWalletInput(false);
+    } catch (err: any) {
+      notify.alert({ title: "Gagal Tambah Dompet", message: err.message, variant: "danger" });
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
       notify.warning("Keterangan Diperlukan", "Nama atau keterangan transaksi wajib diisi.");
@@ -161,47 +184,50 @@ export function CashTransactionModal({
     const recordedBy =
       currentRole.charAt(0).toUpperCase() + currentRole.slice(1).replace("_", " ");
 
-    if (transactionToEdit) {
-      KostStorage.updateCashTransaction(transactionToEdit.id, {
-        type,
-        category: categoryName,
-        category_name: categoryName,
-        wallet_id: selectedWalletId,
-        wallet_name: matchedWallet?.name || "Kas Tunai",
-        title: title.trim(),
-        amount: Number(amount),
-        date,
-        payment_method: matchedWallet?.name || "Kas Tunai",
-        notes: notes.trim(),
-      });
-      notify.success("Transaksi Diperbarui", `Catatan "${title.trim()}" berhasil disimpan.`);
-    } else {
-      const props = KostStorage.getProperties();
-      const property_id = props[0]?.id && props[0].id.includes("-") && props[0].id.length > 20
-        ? props[0].id
-        : "a0000000-0000-0000-0000-000000000001";
-      KostStorage.addCashTransaction({
-        property_id,
-        type,
-        category: categoryName,
-        category_name: categoryName,
-        wallet_id: selectedWalletId,
-        wallet_name: matchedWallet?.name || "Kas Tunai",
-        title: title.trim(),
-        amount: Number(amount),
-        date,
-        payment_method: matchedWallet?.name || "Kas Tunai",
-        notes: notes.trim(),
-        recorded_by: recordedBy,
-      });
-      notify.success(
-        "Transaksi Dibukukan",
-        `${type === "income" ? "Pemasukan" : "Pengeluaran"} "${title.trim()}" senilai ${formatRupiah(amount)} berhasil dicatat.`
-      );
-    }
+    try {
+      if (transactionToEdit) {
+        await KostApiClient.updateCashTransaction(transactionToEdit.id, {
+          type,
+          category: categoryName,
+          category_name: categoryName,
+          wallet_id: selectedWalletId,
+          wallet_name: matchedWallet?.name || "Kas Tunai",
+          title: title.trim(),
+          amount: Number(amount),
+          date,
+          payment_method: matchedWallet?.name || "Kas Tunai",
+          notes: notes.trim(),
+        });
+        notify.success("Transaksi Diperbarui", `Catatan "${title.trim()}" berhasil disimpan.`);
+      } else {
+        await KostApiClient.createCashTransaction({
+          type,
+          category: categoryName,
+          category_name: categoryName,
+          wallet_id: selectedWalletId,
+          wallet_name: matchedWallet?.name || "Kas Tunai",
+          title: title.trim(),
+          amount: Number(amount),
+          date,
+          payment_method: matchedWallet?.name || "Kas Tunai",
+          notes: notes.trim(),
+          recorded_by: recordedBy,
+        });
+        notify.success(
+          "Transaksi Dibukukan",
+          `${type === "income" ? "Pemasukan" : "Pengeluaran"} "${title.trim()}" senilai ${formatRupiah(amount)} berhasil dicatat.`
+        );
+      }
 
-    onSuccess();
-    onClose();
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      notify.alert({
+        title: "Gagal Menyimpan Transaksi",
+        message: err.message || "Terjadi kesalahan pada server.",
+        variant: "danger",
+      });
+    }
   };
 
   return (

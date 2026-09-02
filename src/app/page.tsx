@@ -5,8 +5,6 @@ import { UserRole } from "@/types";
 import { Header } from "@/components/layout/header";
 import { Sidebar } from "@/components/layout/sidebar";
 import { MobileNav } from "@/components/layout/mobile-nav";
-import { KostStorage } from "@/lib/storage";
-
 // Views
 import { OwnerDashboardView } from "@/components/owner/owner-dashboard-view";
 import { OwnerAuditView } from "@/components/owner/owner-audit-view";
@@ -20,19 +18,19 @@ import { ProfileView } from "@/components/profile/profile-view";
 import { StaffManagementView } from "@/components/staff/staff-management-view";
 import { CashFlowView } from "@/components/finance/cashflow-view";
 
+import { useAuth } from "@/lib/auth-context";
+import { hasPermission, getPermissionsForRole } from "@/lib/permissions";
 import { LoginForm } from "@/components/auth/login-form";
 
 export default function HomePage() {
-  const [currentRole, setCurrentRole] = useState<UserRole>("owner");
+  const { user, profile, role, isLoading, signOut } = useAuth();
+  const currentRole = (profile?.role || role || "admin") as UserRole;
+  const isAuthenticated = !!user;
+
   const [activeTab, setActiveTab] = useState<string>("owner-dashboard");
   const [assistantInitialPrompt, setAssistantInitialPrompt] = useState<string>("");
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    KostStorage.init();
-    // Async background sync with Supabase
-    KostStorage.syncWithSupabase();
 
     // Prevent non-Error Event objects from bubbling to Next.js dev overlay
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
@@ -44,28 +42,25 @@ export default function HomePage() {
       }
     };
     window.addEventListener("unhandledrejection", handleUnhandledRejection);
-    
-    // Check session
-    const savedRole = localStorage.getItem("kost_erp_session");
-    if (savedRole) {
-      setCurrentRole(savedRole as UserRole);
-      setIsAuthenticated(true);
-      if (KostStorage.hasPermission(savedRole, "owner-dashboard")) {
-        setActiveTab("owner-dashboard");
-      } else if (KostStorage.hasPermission(savedRole, "rooms")) {
-        setActiveTab("rooms");
-      } else {
-        const perms = KostStorage.getRolePermissions(savedRole);
-        setActiveTab(perms[0] || "profile");
-      }
-    }
-    
-    setIsLoaded(true);
 
     return () => {
       window.removeEventListener("unhandledrejection", handleUnhandledRejection);
     };
   }, []);
+
+  // Update tab default berdasarkan role user yang aktif
+  useEffect(() => {
+    if (isAuthenticated) {
+      if (hasPermission(currentRole, "owner-dashboard")) {
+        setActiveTab("owner-dashboard");
+      } else if (hasPermission(currentRole, "rooms")) {
+        setActiveTab("rooms");
+      } else {
+        const perms = getPermissionsForRole(currentRole);
+        setActiveTab(perms[0] || "profile");
+      }
+    }
+  }, [isAuthenticated, currentRole]);
 
   const handleNavigateTab = (tab: string, prompt?: string) => {
     if (prompt) {
@@ -74,23 +69,8 @@ export default function HomePage() {
     setActiveTab(tab);
   };
 
-  const handleLogin = (role: UserRole) => {
-    localStorage.setItem("kost_erp_session", role);
-    setCurrentRole(role);
-    setIsAuthenticated(true);
-    if (KostStorage.hasPermission(role, "owner-dashboard")) {
-      setActiveTab("owner-dashboard");
-    } else if (KostStorage.hasPermission(role, "rooms")) {
-      setActiveTab("rooms");
-    } else {
-      const perms = KostStorage.getRolePermissions(role);
-      setActiveTab(perms[0] || "profile");
-    }
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem("kost_erp_session");
-    setIsAuthenticated(false);
+  const handleLogout = async () => {
+    await signOut();
   };
 
   const handleCreateLeaseForRoom = (roomId: string) => {
@@ -101,7 +81,7 @@ export default function HomePage() {
     setActiveTab("electricity");
   };
 
-  if (!isLoaded) {
+  if (isLoading) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-slate-50">
         <div className="text-center">
@@ -113,7 +93,7 @@ export default function HomePage() {
   }
 
   if (!isAuthenticated) {
-    return <LoginForm onLogin={handleLogin} />;
+    return <LoginForm />;
   }
 
   return (

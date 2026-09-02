@@ -17,7 +17,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { UserRole } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { hasPermission } from "@/lib/permissions";
 
 interface SidebarProps {
   currentRole: UserRole;
@@ -87,7 +87,7 @@ export function Sidebar({ currentRole, activeTab, onTabChange }: SidebarProps) {
   ];
 
   const visibleItems = allNavItems.filter((item) =>
-    KostStorage.hasPermission(currentRole, item.id)
+    hasPermission(currentRole, item.id)
   );
 
   return (

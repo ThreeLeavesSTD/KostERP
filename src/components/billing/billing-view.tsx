@@ -23,7 +23,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Invoice, InvoiceStatus } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { KostApiClient } from "@/lib/api-client";
 import { formatRupiah, formatDateIndo } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { notify } from "@/lib/notify";
@@ -48,15 +48,22 @@ export function BillingView() {
 
   const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
 
-  const loadData = () => {
-    setInvoices(KostStorage.getInvoices());
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const data = await KostApiClient.getInvoices();
+      setInvoices(data);
+    } catch (err) {
+      console.error("Gagal memuat invoice:", err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
     loadData();
-    const handleStorageChange = () => loadData();
-    window.addEventListener("kost_storage_change", handleStorageChange);
-    return () => window.removeEventListener("kost_storage_change", handleStorageChange);
   }, []);
 
   const filteredInvoices = invoices.filter((inv) => {
@@ -78,49 +85,48 @@ export function BillingView() {
   const totalUnpaidNominal = unpaidInvoices.reduce((s, i) => s + i.total_amount, 0);
   const totalRemindersDispatched = invoices.reduce((s, i) => s + (i.reminder_count || 0), 0);
 
-  const handleBatchGenerateInvoices = () => {
-    const leases = KostStorage.getLeases().filter((l) => l.status === "active");
-    const currentMonth = new Date().toISOString().slice(0, 7);
-    let createdCount = 0;
+  const handleBatchGenerateInvoices = async () => {
+    try {
+      const allLeases = await KostApiClient.getLeases();
+      const activeLeases = allLeases.filter((l) => l.status === "active");
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      let createdCount = 0;
 
-    leases.forEach((lease) => {
-      // Check if invoice already exists for this lease this month
-      const exists = invoices.some(
-        (i) => i.lease_id === lease.id && i.billing_period === currentMonth
-      );
-      if (!exists) {
-        const invNum = `INV/${currentMonth.replace("-", "")}/${Math.floor(
-          100 + Math.random() * 900
-        )}`;
-        const dueDate = new Date();
-        dueDate.setDate(lease.billing_cycle_day || 1);
-        dueDate.setDate(dueDate.getDate() + 5);
+      for (const lease of activeLeases) {
+        const exists = invoices.some(
+          (i) => i.lease_id === lease.id && i.billing_period === currentMonth
+        );
+        if (!exists) {
+          const invNum = `INV/${currentMonth.replace("-", "")}/${Math.floor(
+            100 + Math.random() * 900
+          )}`;
+          const dueDate = new Date();
+          dueDate.setDate(lease.billing_cycle_day || 1);
+          dueDate.setDate(dueDate.getDate() + 5);
 
-        KostStorage.addInvoice({
-          property_id: lease.property_id,
-          lease_id: lease.id,
-          room_id: lease.room_id,
-          invoice_number: invNum,
-          billing_period: currentMonth,
-          subtotal_rent: lease.rent_amount,
-          additional_fees: 0,
-          notes: `Tagihan Sewa Kamar ${lease.room_number} Periode ${currentMonth}`,
-          total_amount: lease.rent_amount,
-          due_date: dueDate.toISOString().slice(0, 10),
-          status: "unpaid",
-          room_number: lease.room_number,
-          tenant_name: lease.tenant_name,
-          tenant_phone: lease.tenant_phone,
-        });
-        createdCount++;
+          await KostApiClient.createInvoice({
+            lease_id: lease.id,
+            invoice_number: invNum,
+            billing_period: currentMonth,
+            subtotal_rent: lease.rent_amount,
+            additional_fees: 0,
+            notes: `Tagihan Sewa Kamar ${lease.room_number} Periode ${currentMonth}`,
+            total_amount: lease.rent_amount,
+            due_date: dueDate.toISOString().slice(0, 10),
+            status: "unpaid",
+          });
+          createdCount++;
+        }
       }
-    });
 
-    loadData();
-    notify.success(
-      "Generate Tagihan Selesai",
-      `Berhasil menerbitkan ${createdCount} invoice bulanan baru untuk seluruh kamar aktif.`
-    );
+      await loadData();
+      notify.success(
+        "Generate Tagihan Selesai",
+        `Berhasil menerbitkan ${createdCount} invoice bulanan baru untuk seluruh kamar aktif.`
+      );
+    } catch (err: any) {
+      notify.alert({ title: "Gagal Generate Tagihan", message: err.message, variant: "danger" });
+    }
   };
 
   const handleDeleteInvoice = async (inv: Invoice) => {
@@ -145,9 +151,13 @@ export function BillingView() {
     });
 
     if (ok) {
-      KostStorage.deleteInvoice(inv.id);
-      loadData();
-      notify.deleted(inv.invoice_number, "Faktur Tagihan");
+      try {
+        await KostApiClient.deleteInvoice(inv.id);
+        await loadData();
+        notify.deleted(inv.invoice_number, "Faktur Tagihan");
+      } catch (err: any) {
+        notify.alert({ title: "Gagal Menghapus Faktur", message: err.message, variant: "danger" });
+      }
     }
   };
 

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { FileSpreadsheet, Search, Download, CheckCircle2, FileText, ArrowDownLeft } from "lucide-react";
 import { Invoice } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { KostApiClient } from "@/lib/api-client";
 import { formatRupiah, formatDateIndo } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import * as XLSX from "xlsx";
@@ -11,16 +11,22 @@ import * as XLSX from "xlsx";
 export function OwnerAuditView() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
 
-  const loadData = () => {
-    setInvoices(KostStorage.getInvoices());
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const data = await KostApiClient.getInvoices();
+      setInvoices(data);
+    } catch (err) {
+      console.error("Gagal memuat invoice audit:", err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
     loadData();
-    const handleStorageChange = () => loadData();
-    window.addEventListener("kost_storage_change", handleStorageChange);
-    return () => window.removeEventListener("kost_storage_change", handleStorageChange);
   }, []);
 
   const paidInvoices = invoices.filter((i) => i.status === "paid");

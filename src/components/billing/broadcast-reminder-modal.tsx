@@ -5,7 +5,7 @@ import { Send, CheckCircle2, AlertTriangle, Users, MessageSquare, Sparkles, Cloc
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Invoice } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { KostApiClient } from "@/lib/api-client";
 import { formatDateIndo, formatRupiah } from "@/lib/utils";
 import { WhatsAppTemplates, ReminderStage, sendWebhookToN8n } from "@/lib/n8n/webhook-client";
 import { notify } from "@/lib/notify";
@@ -36,7 +36,12 @@ export function BroadcastReminderModal({
     setProgress(0);
     setSentCount(0);
 
-    const paymentAccounts = KostStorage.getPaymentMethods();
+    let paymentAccounts: any[] = [];
+    try {
+      paymentAccounts = await KostApiClient.getPaymentMethods();
+    } catch {
+      // fallback
+    }
     const webhookUrl =
       process.env.NEXT_PUBLIC_N8N_WEBHOOK_INVOICE_REMINDER ||
       "https://n8n.webhook.internal/invoice-reminder";
@@ -68,7 +73,14 @@ export function BroadcastReminderModal({
         },
       });
 
-      KostStorage.recordInvoiceReminder(inv.id, stage);
+      try {
+        await KostApiClient.updateInvoice(inv.id, {
+          reminder_count: (inv.reminder_count || 0) + 1,
+          last_reminder_at: new Date().toISOString(),
+        });
+      } catch {
+        // ignore individual record error
+      }
       count++;
       setSentCount(count);
       setProgress(Math.round((count / unpaidInvoices.length) * 100));

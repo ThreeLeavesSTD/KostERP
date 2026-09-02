@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Tenant } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { KostApiClient } from "@/lib/api-client";
 import { normalizePhoneNumber } from "@/lib/utils";
 import { UploadCloud, CheckCircle2 } from "lucide-react";
 import { notify } from "@/lib/notify";
@@ -57,7 +57,7 @@ export function TenantFormModal({
     setIdCardUrl(sampleKtpUrl);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim()) {
       notify.warning("Nama Lengkap Wajib Diisi", "Silakan masukkan nama lengkap penghuni.");
@@ -69,38 +69,41 @@ export function TenantFormModal({
     }
 
     const normalizedPhone = normalizePhoneNumber(phoneNumber);
-    const props = KostStorage.getProperties();
-    const property_id = props[0]?.id && props[0].id.includes("-") && props[0].id.length > 20
-      ? props[0].id
-      : "a0000000-0000-0000-0000-000000000001";
 
-    if (tenantToEdit) {
-      KostStorage.updateTenant(tenantToEdit.id, {
-        full_name: fullName.trim(),
-        phone_number: normalizedPhone,
-        id_card_number: idCardNumber.trim(),
-        id_card_url: idCardUrl,
-        emergency_contact_name: emergencyName.trim(),
-        emergency_contact_phone: emergencyPhone ? normalizePhoneNumber(emergencyPhone) : undefined,
-        emergency_contact_relation: emergencyRelation,
+    try {
+      if (tenantToEdit) {
+        await KostApiClient.updateTenant(tenantToEdit.id, {
+          full_name: fullName.trim(),
+          phone_number: normalizedPhone,
+          id_card_number: idCardNumber.trim(),
+          id_card_url: idCardUrl,
+          emergency_contact_name: emergencyName.trim(),
+          emergency_contact_phone: emergencyPhone ? normalizePhoneNumber(emergencyPhone) : undefined,
+          emergency_contact_relation: emergencyRelation,
+        });
+        notify.success("Profil Penghuni Diperbarui", `Data ${fullName.trim()} berhasil disimpan.`);
+      } else {
+        await KostApiClient.createTenant({
+          full_name: fullName.trim(),
+          phone_number: normalizedPhone,
+          id_card_number: idCardNumber.trim(),
+          id_card_url: idCardUrl,
+          emergency_contact_name: emergencyName.trim(),
+          emergency_contact_phone: emergencyPhone ? normalizePhoneNumber(emergencyPhone) : undefined,
+          emergency_contact_relation: emergencyRelation,
+        });
+        notify.success("Penghuni Didaftarkan", `Profil ${fullName.trim()} berhasil ditambahkan ke database.`);
+      }
+
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      notify.alert({
+        title: "Gagal Menyimpan Data",
+        message: err.message || "Terjadi kesalahan saat menghubungi server.",
+        variant: "danger",
       });
-      notify.success("Profil Penghuni Diperbarui", `Data ${fullName.trim()} berhasil disimpan.`);
-    } else {
-      KostStorage.addTenant({
-        property_id,
-        full_name: fullName.trim(),
-        phone_number: normalizedPhone,
-        id_card_number: idCardNumber.trim(),
-        id_card_url: idCardUrl,
-        emergency_contact_name: emergencyName.trim(),
-        emergency_contact_phone: emergencyPhone ? normalizePhoneNumber(emergencyPhone) : undefined,
-        emergency_contact_relation: emergencyRelation,
-      });
-      notify.success("Penghuni Didaftarkan", `Profil ${fullName.trim()} berhasil ditambahkan ke database.`);
     }
-
-    onSuccess();
-    onClose();
   };
 
   return (

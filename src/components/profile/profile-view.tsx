@@ -18,8 +18,11 @@ import {
   ArrowRight,
   ExternalLink,
 } from "lucide-react";
-import { KostStorage } from "@/lib/storage";
+import { useAuth } from "@/lib/auth-context";
+import { KostApiClient } from "@/lib/api-client";
 import { UserRole, UserProfile } from "@/types";
+import { createClient } from "@/lib/supabase/client";
+import { getPermissionsForRole } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -34,7 +37,8 @@ export function ProfileView({
   onNavigateTab,
   onLogout,
 }: ProfileViewProps) {
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const { profile: authProfile, user, refreshProfile } = useAuth();
+  const [profile, setProfile] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
@@ -49,35 +53,35 @@ export function ProfileView({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordMessage, setPasswordMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  const loadProfile = () => {
-    const p = KostStorage.getUserProfile();
-    setProfile(p);
-    setFullName(p.full_name);
-    setEmail(p.email);
-    setPhone(p.phone_number);
-  };
-
   useEffect(() => {
-    loadProfile();
-  }, []);
+    if (authProfile) {
+      setProfile(authProfile);
+      setFullName(authProfile.full_name || "");
+      setEmail(authProfile.email || user?.email || "");
+      setPhone(authProfile.phone_number || "");
+    }
+  }, [authProfile, user]);
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profile) return;
 
-    KostStorage.updateUserProfile({
-      full_name: fullName,
-      email: email,
-      phone_number: phone,
-    });
+    try {
+      await KostApiClient.updateStaff(profile.id, {
+        full_name: fullName,
+        phone_number: phone,
+      });
 
-    setSaveSuccess(true);
-    setIsEditing(false);
-    loadProfile();
-    setTimeout(() => setSaveSuccess(false), 3000);
+      await refreshProfile();
+      setSaveSuccess(true);
+      setIsEditing(false);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err: any) {
+      alert(`Gagal memperbarui profil: ${err.message}`);
+    }
   };
 
-  const handleChangePassword = (e: React.FormEvent) => {
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPassword || newPassword.length < 6) {
       setPasswordMessage({ type: "error", text: "Password baru minimal 6 karakter." });
@@ -88,18 +92,25 @@ export function ProfileView({
       return;
     }
 
-    // Success simulation
-    setPasswordMessage({
-      type: "success",
-      text: "Password akun berhasil diperbarui secara aman!",
-    });
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-    setTimeout(() => setPasswordMessage(null), 4000);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+
+      setPasswordMessage({
+        type: "success",
+        text: "Password akun berhasil diperbarui secara aman!",
+      });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setTimeout(() => setPasswordMessage(null), 4000);
+    } catch (err: any) {
+      setPasswordMessage({ type: "error", text: err.message || "Gagal mengubah password." });
+    }
   };
 
-  if (!profile) return null;
+  if (!profile && !authProfile) return null;
 
   return (
     <div className="space-y-6">
@@ -150,7 +161,7 @@ export function ProfileView({
               <div className="flex h-24 w-24 items-center justify-center rounded-3xl bg-[#D9FF43] text-[#0A0A0A] text-2xl font-black shadow-lime-glow">
                 {profile.full_name
                   .split(" ")
-                  .map((n) => n[0])
+                  .map((n: string) => n[0])
                   .slice(0, 2)
                   .join("")}
               </div>
@@ -200,11 +211,11 @@ export function ProfileView({
           <div className="rounded-3xl bg-white p-5 shadow-spatial border border-white/80 dark:bg-[#18181B] dark:border-white/10">
             <h4 className="text-xs font-black uppercase tracking-wider text-neutral-400 mb-3 flex items-center gap-1.5">
               <KeyRound className="h-3.5 w-3.5 text-neutral-600 dark:text-neutral-300" />
-              <span>Hak Akses Akun ({KostStorage.getRolePermissions(currentRole).length} Modul)</span>
+              <span>Hak Akses Akun ({getPermissionsForRole(currentRole).length} Modul)</span>
             </h4>
 
             <div className="space-y-2 text-xs">
-              {KostStorage.getRolePermissions(currentRole).map((permKey) => {
+              {getPermissionsForRole(currentRole).map((permKey) => {
                 const labelMap: Record<string, string> = {
                   "owner-dashboard": "Dashboard & Arus Kas",
                   "ai-assistant": "Kost Concierge AI",
@@ -325,7 +336,11 @@ export function ProfileView({
                     size="sm"
                     onClick={() => {
                       setIsEditing(false);
-                      loadProfile();
+                      if (authProfile) {
+                        setFullName(authProfile.full_name || "");
+                        setEmail(authProfile.email || user?.email || "");
+                        setPhone(authProfile.phone_number || "");
+                      }
                     }}
                     className="text-xs font-bold"
                   >

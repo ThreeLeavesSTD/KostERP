@@ -21,18 +21,29 @@ import {
   MessageSquare,
   ShieldCheck,
   Phone,
+  Settings,
+  RefreshCw,
+  ExternalLink,
+  Wifi,
 } from "lucide-react";
-import { KostStorage } from "@/lib/storage";
+import { KostApiClient } from "@/lib/api-client";
 import { formatRupiah, formatDateIndo, formatTokenPLN } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Modal } from "@/components/ui/modal";
 import { notify } from "@/lib/notify";
+import { sendChatbotMessageToN8n } from "@/lib/n8n/webhook-client";
+
+const DEFAULT_WEBHOOK_URL =
+  process.env.NEXT_PUBLIC_N8N_WEBHOOK_CHATBOT ||
+  "https://n8n.noud.web.id/webhook-test/kostChatbotz";
 
 interface Message {
   id: string;
   sender: "user" | "assistant";
   text: string;
   timestamp: string;
+  source?: "n8n_webhook" | "local_concierge";
   actionType?: "rooms" | "invoices" | "electricity" | "revenue" | "cashflow" | "general";
   actionData?: any;
 }
@@ -48,17 +59,52 @@ export function AIAssistantView({
   onNavigateTab,
   onClearInitialPrompt,
 }: AIAssistantViewProps) {
+  const [webhookUrl, setWebhookUrl] = useState(DEFAULT_WEBHOOK_URL);
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [isTestingWebhook, setIsTestingWebhook] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<
+    "connected" | "standby" | "disconnected" | "checking" | "warning"
+  >("standby");
+  const [testResult, setTestResult] = useState<{
+    status: "success" | "warning" | "error";
+    message: string;
+  } | null>(null);
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "msg-welcome",
       sender: "assistant",
-      text: "Halo! Saya **Kost Concierge AI**, asisten cerdas untuk operasional properti dan otomasi penagihan sewa kost Anda. Ada yang bisa saya bantu hari ini?",
+      text: "Halo! Saya **Kost Concierge AI**, asisten cerdas untuk operasional properti dan otomasi penagihan sewa kost Anda. Terhubung langsung dengan webhook n8n (*kostChatbotz*). Ada yang bisa saya bantu hari ini?",
       timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
+      source: "n8n_webhook",
     },
   ]);
   const [inputPrompt, setInputPrompt] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Load custom webhook from localStorage if previously configured
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("kost_n8n_chatbot_webhook");
+      if (saved && saved.trim()) {
+        setWebhookUrl(saved.trim());
+      }
+    }
+  }, []);
+
+  const handleSelectPreset = (url: string) => {
+    setWebhookUrl(url);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("kost_n8n_chatbot_webhook", url);
+    }
+    notify.success(
+      "Target Webhook Diperbarui",
+      url.includes("webhook-test")
+        ? "Beralih ke Mode Test (/webhook-test/kostChatbotz)"
+        : "Beralih ke Mode Production (/webhook/kostChatbotz)"
+    );
+  };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -114,12 +160,16 @@ export function AIAssistantView({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const generateAIResponse = (query: string): Omit<Message, "id" | "timestamp"> => {
+  const generateAIResponse = async (query: string): Promise<Omit<Message, "id" | "timestamp">> => {
     const q = query.toLowerCase();
-    const rooms = KostStorage.getRooms();
-    const invoices = KostStorage.getInvoices();
-    const metrics = KostStorage.getOwnerMetrics();
-    const electricity = KostStorage.getElectricityTransactions();
+    const [rooms, invoices, metrics, electricity, complaints, cash] = await Promise.all([
+      KostApiClient.getRooms().catch(() => []),
+      KostApiClient.getInvoices().catch(() => []),
+      KostApiClient.getDashboardSummary().catch(() => null),
+      KostApiClient.getElectricityTransactions().catch(() => []),
+      KostApiClient.getComplaints().catch(() => []),
+      KostApiClient.getCashTransactions().catch(() => []),
+    ]);
 
     // 1. Check vacant / available rooms
     if (q.includes("kamar") && (q.includes("kosong") || q.includes("tersedia") || q.includes("siap huni"))) {
@@ -151,7 +201,7 @@ export function AIAssistantView({
       }
       return {
         sender: "assistant",
-        text: `Ditemukan **${unpaidInvoices.length} tagihan sewa belum lunas** dengan total nilai **${formatRupiah(metrics.totalUnpaidAmount)}**. Anda dapat langsung menyalin format pengingat WhatsApp atau membuka modul billing:`,
+        text: `Ditemukan **${unpaidInvoices.length} tagihan sewa belum lunas** dengan total nilai **${formatRupiah(metrics?.totalUnpaidAmount || 0)}**. Anda dapat langsung menyalin format pengingat WhatsApp atau membuka modul billing:`,
         actionType: "invoices",
         actionData: unpaidInvoices,
       };
@@ -161,7 +211,7 @@ export function AIAssistantView({
     if (q.includes("token") || q.includes("listrik") || q.includes("pln")) {
       return {
         sender: "assistant",
-        text: `📊 **Analitik Distribusi Token Listrik PLN:**\n\n• Total Transaksi: **${metrics.electricityTransactionsCount} transaksi**\n• Akumulasi Laba Bersih: **+${formatRupiah(metrics.electricityProfitTotal)}**\n• Margin Rata-rata: **Rp 2.000 - Rp 3.000 / transaksi**\n\nIntegrasi webhook n8n siap mengirimkan 20 digit kode token langsung ke WhatsApp penghuni secara otomatis.`,
+        text: `📊 **Analitik Distribusi Token Listrik PLN:**\n\n• Total Transaksi: **${metrics?.electricityTransactionsCount || electricity.length} transaksi**\n• Akumulasi Laba Bersih: **+${formatRupiah(metrics?.electricityProfitTotal || 0)}**\n• Margin Rata-rata: **Rp 2.000 - Rp 3.000 / transaksi**\n\nIntegrasi webhook n8n siap mengirimkan 20 digit kode token langsung ke WhatsApp penghuni secara otomatis.`,
         actionType: "electricity",
         actionData: electricity.slice(0, 3),
       };
@@ -169,7 +219,6 @@ export function AIAssistantView({
 
     // 4. Check complaints / WhatsApp CS AI tickets
     if (q.includes("keluhan") || q.includes("komplain") || q.includes("rusak") || q.includes("bocor") || q.includes("cs ai") || q.includes("tiket")) {
-      const complaints = KostStorage.getComplaints();
       const pendingComplaints = complaints.filter((c) => c.status === "pending" || c.status === "in_progress");
       if (pendingComplaints.length === 0) {
         return {
@@ -201,10 +250,17 @@ export function AIAssistantView({
       q.includes("biaya operasional") ||
       q.includes("saldo")
     ) {
-      const cashSummary = KostStorage.getCashFlowSummary();
+      let totalIncome = 0;
+      let totalExpense = 0;
+      cash.forEach((c) => {
+        if (c.type === "income") totalIncome += c.amount;
+        else totalExpense += c.amount;
+      });
+      const netCashFlow = totalIncome - totalExpense;
+
       return {
         sender: "assistant",
-        text: `💼 **Rekapitulasi Kas Operasional & Pembukuan:**\n\n• Total Pemasukan: **${formatRupiah(cashSummary.totalIncome)}**\n• Total Pengeluaran: **${formatRupiah(cashSummary.totalExpense)}**\n• Arus Kas Bersih (Net): **${cashSummary.netCashFlow >= 0 ? `+${formatRupiah(cashSummary.netCashFlow)}` : formatRupiah(cashSummary.netCashFlow)}** (${cashSummary.netCashFlow >= 0 ? "Surplus ✅" : "Defisit ⚠️"})\n• Estimasi Saldo Kas Berjalan: **${formatRupiah(cashSummary.balance)}**\n\nAnda dapat membuka modul **Kas Operasional** untuk mencatat transaksi baru atau mengunduh laporan CSV.`,
+        text: `💼 **Rekapitulasi Kas Operasional & Pembukuan:**\n\n• Total Pemasukan: **${formatRupiah(totalIncome)}**\n• Total Pengeluaran: **${formatRupiah(totalExpense)}**\n• Arus Kas Bersih (Net): **${netCashFlow >= 0 ? `+${formatRupiah(netCashFlow)}` : formatRupiah(netCashFlow)}** (${netCashFlow >= 0 ? "Surplus ✅" : "Defisit ⚠️"})\n• Estimasi Saldo Kas Berjalan: **${formatRupiah(netCashFlow)}**\n\nAnda dapat membuka modul **Kas Operasional** untuk mencatat transaksi baru atau mengunduh laporan CSV.`,
         actionType: "cashflow",
       };
     }
@@ -213,7 +269,7 @@ export function AIAssistantView({
     if (q.includes("pendapatan") || q.includes("revenue") || q.includes("arus kas") || q.includes("okupansi") || q.includes("laba") || q.includes("keuangan")) {
       return {
         sender: "assistant",
-        text: `📈 **Ringkasan Finansial & Okupansi Properti:**\n\n• Tingkat Okupansi: **${metrics.occupancyRate}%** (${metrics.occupiedRooms}/${metrics.totalRooms} Kamar Terisi)\n• Penerimaan Terverifikasi: **${formatRupiah(metrics.currentMonthRevenue)}**\n• Target Bulanan: **${formatRupiah(metrics.targetMonthlyRevenue)}**\n• Laba Bersih Token PLN: **+${formatRupiah(metrics.electricityProfitTotal)}**\n• Piutang Tertunda: **${formatRupiah(metrics.totalUnpaidAmount)}**`,
+        text: `📈 **Ringkasan Finansial & Okupansi Properti:**\n\n• Tingkat Okupansi: **${metrics?.occupancyRate || 0}%** (${metrics?.occupiedRooms || 0}/${metrics?.totalRooms || 0} Kamar Terisi)\n• Penerimaan Terverifikasi: **${formatRupiah(metrics?.currentMonthRevenue || 0)}**\n• Target Bulanan: **${formatRupiah(metrics?.targetMonthlyRevenue || 0)}**\n• Laba Bersih Token PLN: **+${formatRupiah(metrics?.electricityProfitTotal || 0)}**\n• Piutang Tertunda: **${formatRupiah(metrics?.totalUnpaidAmount || 0)}**`,
         actionType: "revenue",
       };
     }
@@ -226,7 +282,74 @@ export function AIAssistantView({
     };
   };
 
-  const handleUserSubmit = (userText: string) => {
+  const handleTestWebhook = async () => {
+    setIsTestingWebhook(true);
+    setTestResult(null);
+    setConnectionStatus("checking");
+    try {
+      const res = await fetch("/api/assistant/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "Ping connection test from Kost Concierge ERP",
+          webhook_url: webhookUrl,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setConnectionStatus("connected");
+        setTestResult({
+          status: "success",
+          message: `Koneksi Berhasil! Webhook n8n AI merespons: "${typeof data.reply === "string" ? data.reply.slice(0, 100) : "OK"}"`,
+        });
+        notify.success("n8n AI Terhubung", "Workflow n8n aktif dan merespons dengan sukses.");
+      } else if (data.isTestInactive) {
+        setConnectionStatus("standby");
+        setTestResult({
+          status: "warning",
+          message: `Webhook Test Standby (Status 404): Alur n8n belum di-trigger. Klik tombol 'Execute workflow' pada kanvas n8n Anda lalu coba lagi.`,
+        });
+        notify.warning("Mode Test Standby", "Klik 'Execute workflow' di kanvas n8n.");
+      } else if (data.isNoItemFound) {
+        setConnectionStatus("warning");
+        setTestResult({
+          status: "warning",
+          message: `Webhook n8n menerima request, namun alur n8n mengembalikan status 'No item to return was found'. Pastikan alur n8n Anda terhubung ke node 'Respond to Webhook' atau AI Agent.`,
+        });
+        notify.warning("No Item Returned", "Periksa node output/Respond to Webhook di n8n.");
+      } else {
+        setConnectionStatus("disconnected");
+        setTestResult({
+          status: "error",
+          message: data.error || data.hint || "Gagal menghubungkan ke webhook n8n.",
+        });
+        notify.error("Koneksi Gagal", data.error || "Gagal menghubungi n8n.");
+      }
+    } catch (err: unknown) {
+      setConnectionStatus("disconnected");
+      const msg = err instanceof Error ? err.message : "Error saat ping test";
+      setTestResult({
+        status: "error",
+        message: msg,
+      });
+    } finally {
+      setIsTestingWebhook(false);
+    }
+  };
+
+  const handleSaveWebhookConfig = () => {
+    if (!webhookUrl.trim()) {
+      notify.error("URL Kosong", "Masukkan URL webhook n8n yang valid.");
+      return;
+    }
+    if (typeof window !== "undefined") {
+      localStorage.setItem("kost_n8n_chatbot_webhook", webhookUrl.trim());
+    }
+    notify.success("Konfigurasi Tersimpan", `Webhook n8n chatbot diperbarui ke: ${webhookUrl.trim()}`);
+    setIsConfigModalOpen(false);
+  };
+
+  const handleUserSubmit = async (userText: string) => {
     if (!userText.trim()) return;
 
     const userMsg: Message = {
@@ -240,16 +363,80 @@ export function AIAssistantView({
     setInputPrompt("");
     setIsTyping(true);
 
-    setTimeout(() => {
-      const response = generateAIResponse(userText);
+    try {
+      // 1. Fetch live metrics & property context to send along with prompt to n8n
+      const [rooms, invoices, metrics, electricity, complaints, cash] = await Promise.all([
+        KostApiClient.getRooms().catch(() => []),
+        KostApiClient.getInvoices().catch(() => []),
+        KostApiClient.getDashboardSummary().catch(() => null),
+        KostApiClient.getElectricityTransactions().catch(() => []),
+        KostApiClient.getComplaints().catch(() => []),
+        KostApiClient.getCashTransactions().catch(() => []),
+      ]);
+
+      const contextPayload = {
+        totalRooms: rooms.length,
+        availableRooms: rooms.filter((r) => r.status === "available").length,
+        occupiedRooms: rooms.filter((r) => r.status === "occupied").length,
+        unpaidInvoicesCount: invoices.filter((i) => i.status === "unpaid" || i.status === "overdue").length,
+        totalUnpaidAmount: metrics?.totalUnpaidAmount || 0,
+        occupancyRate: metrics?.occupancyRate || 0,
+        electricityTransactionsCount: electricity.length,
+        activeComplaintsCount: complaints.filter((c) => c.status === "pending" || c.status === "in_progress").length,
+      };
+
+      // 2. Dispatch query to n8n Webhook
+      const n8nRes = await sendChatbotMessageToN8n(userText, contextPayload, webhookUrl);
+
+      if (n8nRes.success && n8nRes.reply) {
+        setConnectionStatus("connected");
+        const aiMsg: Message = {
+          id: `ai-${Date.now()}`,
+          sender: "assistant",
+          text: n8nRes.reply,
+          source: "n8n_webhook",
+          actionType: n8nRes.actionType,
+          actionData: n8nRes.actionData,
+          timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
+        };
+        setMessages((prev) => [...prev, aiMsg]);
+        return;
+      }
+
+      // 3. Fallback to local concierge intelligence if n8n webhook test is standby/inactive
+      const fallback = await generateAIResponse(userText);
+      let fallbackText = fallback.text;
+
+      if (n8nRes.isTestInactive) {
+        setConnectionStatus("standby");
+        fallbackText = `📡 **Status Koneksi n8n AI (kostChatbotz):**\nWebhook n8n dalam *Mode Uji Coba (webhook-test)* sedang standby menunggu trigger di kanvas n8n.\n\n👉 **Langkah Menghubungkan:** Buka alur n8n Anda di browser, klik tombol **'Execute workflow'** di kanvas, lalu kirim pesan lagi di sini agar dijawab langsung oleh AI Agent n8n Anda!\n\n---\n*(Balasan sementara dari Concierge ERP internal):*\n\n${fallback.text}`;
+      } else if (n8nRes.isNoItemFound) {
+        setConnectionStatus("warning");
+        fallbackText = `⚠️ **Status Koneksi n8n AI (kostChatbotz):**\nPesan berhasil terkirim ke webhook n8n, namun alur n8n mengembalikan pesan *'No item to return was found'*.\n\n👉 **Solusi:** Di editor n8n, pastikan node **AI Agent** atau LLM Anda menghasilkan balasan dan terhubung ke node **'Respond to Webhook'**.\n\n---\n*(Balasan sementara dari Concierge ERP internal):*\n\n${fallback.text}`;
+      }
+
       const aiMsg: Message = {
         id: `ai-${Date.now()}`,
-        ...response,
+        sender: "assistant",
+        text: fallbackText,
+        source: "local_concierge",
+        actionType: fallback.actionType,
+        actionData: fallback.actionData,
         timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
       };
       setMessages((prev) => [...prev, aiMsg]);
+    } catch {
+      const aiMsg: Message = {
+        id: `ai-${Date.now()}`,
+        sender: "assistant",
+        text: "Maaf, terjadi kendala saat menghubungkan ke database server atau webhook.",
+        source: "local_concierge",
+        timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
+      };
+      setMessages((prev) => [...prev, aiMsg]);
+    } finally {
       setIsTyping(false);
-    }, 600);
+    }
   };
 
   const handleClearChat = async () => {
@@ -267,6 +454,7 @@ export function AIAssistantView({
           sender: "assistant",
           text: "Riwayat chat telah dibersihkan. Ada yang bisa saya bantu terkait operasional kost Anda?",
           timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
+          source: "n8n_webhook",
         },
       ]);
       notify.success("Riwayat Dibersihkan", "Chatbot AI telah direset ke kondisi awal.");
@@ -282,14 +470,40 @@ export function AIAssistantView({
             <h2 className="text-2xl font-black tracking-tight text-neutral-900 dark:text-white">
               Kost Concierge AI Assistant
             </h2>
-            <Badge variant="lime">n8n Connected</Badge>
+            <button
+              onClick={handleTestWebhook}
+              className="inline-flex items-center gap-1.5 rounded-full border border-lime-500/30 bg-[#D9FF43] px-3 py-1 text-xs font-black text-neutral-900 shadow-lime-glow hover:bg-[#c8f032] transition-colors"
+              title="Klik untuk tes koneksi Webhook n8n"
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  connectionStatus === "connected"
+                    ? "bg-emerald-600 animate-pulse"
+                    : connectionStatus === "standby"
+                    ? "bg-amber-600 animate-pulse"
+                    : "bg-rose-600"
+                }`}
+              />
+              <span>n8n: {webhookUrl.includes("kostChatbotz") ? "kostChatbotz" : "Connected"}</span>
+              <RefreshCw className={`h-3 w-3 ml-0.5 ${isTestingWebhook ? "animate-spin" : ""}`} />
+            </button>
           </div>
           <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mt-0.5">
-            Asisten cerdas otomatisasi operasional kost, pengecekan inventaris kamar, dan reminder WhatsApp.
+            Asisten cerdas terhubung ke webhook n8n untuk otomasi operasional properti dan percakapan AI.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsConfigModalOpen(true)}
+            className="gap-1.5 text-xs font-bold text-neutral-700 dark:text-neutral-300"
+          >
+            <Settings className="h-3.5 w-3.5" />
+            <span>Webhook Settings</span>
+          </Button>
+
           <Button
             variant="outline"
             size="sm"
@@ -306,34 +520,143 @@ export function AIAssistantView({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Left 4 Cols: Assistant Capabilities & Knowledge Card */}
         <div className="lg:col-span-4 flex flex-col gap-4">
-          {/* Assistant Profile Bento Card */}
-          <div className="rounded-3xl bg-[#0A0A0A] p-6 text-white shadow-spatial border border-neutral-800 flex flex-col justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#D9FF43] text-[#0A0A0A] shadow-lime-glow">
-                <Sparkles className="h-6 w-6" />
+          {/* Interactive n8n AI Webhook Connection Panel */}
+          <div className="rounded-3xl bg-[#0A0A0A] p-5 text-white shadow-spatial border border-neutral-800 space-y-3.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-2xl bg-[#D9FF43] flex items-center justify-center text-neutral-900 shadow-lime-glow">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black tracking-tight text-white">
+                    Koneksi AI Webhook n8n
+                  </h4>
+                  <p className="text-[10px] text-neutral-400 font-medium">
+                    Hubungkan AI Agent ke Chatbot
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-sm font-black text-white">Kost Concierge AI</h3>
-                <p className="text-[11px] text-neutral-400 font-medium flex items-center gap-1.5 mt-0.5">
-                  <span className="h-2 w-2 rounded-full bg-[#D9FF43] animate-pulse" />
-                  Model Ready · Operasional 24/7
-                </p>
-              </div>
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold border ${
+                  connectionStatus === "connected"
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                    : connectionStatus === "standby"
+                    ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                    : "bg-neutral-800 text-neutral-400 border-neutral-700"
+                }`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    connectionStatus === "connected"
+                      ? "bg-emerald-400 animate-pulse"
+                      : connectionStatus === "standby"
+                      ? "bg-amber-400 animate-pulse"
+                      : "bg-neutral-500"
+                  }`}
+                />
+                {connectionStatus === "connected"
+                  ? "AI Connected"
+                  : connectionStatus === "standby"
+                  ? "Standby"
+                  : "Siap Terhubung"}
+              </span>
             </div>
 
-            <p className="text-xs text-neutral-300 mt-4 leading-relaxed">
-              Asisten terhubung langsung dengan basis data properti lokal dan webhook n8n untuk otomasi pengiriman pesan WhatsApp.
-            </p>
+            {/* Webhook URL Input */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[10px] text-neutral-400 font-semibold">
+                <span>Endpoint Webhook:</span>
+                <span className="text-[#D9FF43] font-mono">kostChatbotz</span>
+              </div>
+              <input
+                type="text"
+                value={webhookUrl}
+                onChange={(e) => {
+                  setWebhookUrl(e.target.value);
+                  if (typeof window !== "undefined") {
+                    localStorage.setItem("kost_n8n_chatbot_webhook", e.target.value);
+                  }
+                }}
+                placeholder="https://n8n.noud.web.id/webhook-test/kostChatbotz"
+                className="w-full rounded-xl border border-neutral-800 bg-neutral-900 px-3 py-2 text-[11px] font-mono text-neutral-200 focus:border-[#D9FF43] focus:outline-none"
+              />
+            </div>
 
-            <div className="mt-5 border-t border-neutral-800 pt-4 space-y-2 text-xs">
-              <div className="flex items-center justify-between text-neutral-400">
-                <span>Status Properti:</span>
-                <span className="font-bold text-white">Kost Putri Graha Asri</span>
+            {/* Mode Toggles */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleSelectPreset("https://n8n.noud.web.id/webhook-test/kostChatbotz")}
+                className={`rounded-xl py-1.5 px-2 text-[10px] font-extrabold border transition-all text-center ${
+                  webhookUrl.includes("webhook-test")
+                    ? "border-[#D9FF43] bg-[#D9FF43] text-neutral-900 shadow-lime-glow"
+                    : "border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-white"
+                }`}
+              >
+                🧪 Mode Test
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelectPreset("https://n8n.noud.web.id/webhook/kostChatbotz")}
+                className={`rounded-xl py-1.5 px-2 text-[10px] font-extrabold border transition-all text-center ${
+                  !webhookUrl.includes("webhook-test") && webhookUrl.includes("kostChatbotz")
+                    ? "border-[#D9FF43] bg-[#D9FF43] text-neutral-900 shadow-lime-glow"
+                    : "border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-white"
+                }`}
+              >
+                🚀 Mode Production
+              </button>
+            </div>
+
+            {/* Ping Test Button */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isTestingWebhook}
+              onClick={handleTestWebhook}
+              className="w-full h-9 rounded-xl font-extrabold text-xs gap-1.5 border-neutral-700 bg-neutral-800 text-white hover:bg-[#D9FF43] hover:text-neutral-900 transition-colors"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isTestingWebhook ? "animate-spin" : ""}`} />
+              <span>{isTestingWebhook ? "Menguji Koneksi n8n..." : "⚡ Hubungkan & Tes Webhook"}</span>
+            </Button>
+
+            {/* Live Test Feedback Banner */}
+            {testResult && (
+              <div
+                className={`rounded-xl p-2.5 text-[11px] leading-snug border ${
+                  testResult.status === "success"
+                    ? "bg-emerald-950/70 border-emerald-800 text-emerald-300"
+                    : testResult.status === "warning"
+                    ? "bg-amber-950/70 border-amber-800 text-amber-300"
+                    : "bg-rose-950/70 border-rose-800 text-rose-300"
+                }`}
+              >
+                <div className="font-bold mb-0.5 flex items-center gap-1">
+                  {testResult.status === "success"
+                    ? "✅ AI Terhubung"
+                    : testResult.status === "warning"
+                    ? "🟡 Kanvas Standby"
+                    : "❌ Gagal Terhubung"}
+                </div>
+                <p>{testResult.message}</p>
               </div>
-              <div className="flex items-center justify-between text-neutral-400">
-                <span>Webhook WhatsApp:</span>
-                <span className="font-bold text-[#D9FF43]">Aktif (Ready)</span>
-              </div>
+            )}
+          </div>
+
+          {/* Assistant Info Bento Card */}
+          <div className="rounded-3xl bg-[#0A0A0A] p-5 text-white shadow-spatial border border-neutral-800 space-y-3">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-neutral-400">Status Properti:</span>
+              <span className="font-bold text-white">Kost Putri Graha Asri</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-neutral-400">Model Operasional:</span>
+              <span className="font-bold text-[#D9FF43]">24/7 Concierge</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-neutral-400">Integrasi Data:</span>
+              <span className="font-bold text-white">Kamar, Billing & PLN</span>
             </div>
           </div>
 
@@ -397,7 +720,19 @@ export function AIAssistantView({
                         isAssistant ? "text-neutral-400" : "text-neutral-400 dark:text-neutral-500"
                       }`}
                     >
-                      <span>{isAssistant ? "Kost Concierge AI" : "Anda"}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span>{isAssistant ? "Kost Concierge AI" : "Anda"}</span>
+                        {isAssistant && msg.source === "n8n_webhook" && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[#D9FF43] px-1.5 py-0.5 text-[9px] font-black text-[#0A0A0A]">
+                            <Sparkles className="h-2.5 w-2.5" /> n8n Live
+                          </span>
+                        )}
+                        {isAssistant && msg.source === "local_concierge" && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-neutral-200 dark:bg-neutral-700 px-1.5 py-0.5 text-[9px] font-bold text-neutral-700 dark:text-neutral-300">
+                            Concierge Fallback
+                          </span>
+                        )}
+                      </div>
                       <span>{msg.timestamp}</span>
                     </div>
 
@@ -562,6 +897,136 @@ export function AIAssistantView({
           </div>
         </div>
       </div>
+
+      {/* Webhook Configuration & Testing Modal */}
+      <Modal
+        isOpen={isConfigModalOpen}
+        onClose={() => setIsConfigModalOpen(false)}
+        title="Pengaturan Webhook n8n Chatbot"
+        description="Konfigurasi URL webhook n8n untuk integrasi AI Concierge chatbot kost."
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs font-bold text-neutral-700 dark:text-neutral-300">
+              Webhook Endpoint URL
+            </label>
+            <div className="mt-1.5 flex gap-2">
+              <input
+                type="text"
+                value={webhookUrl}
+                onChange={(e) => setWebhookUrl(e.target.value)}
+                placeholder="https://n8n.noud.web.id/webhook-test/kostChatbotz"
+                className="flex-1 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-xs font-mono dark:bg-neutral-800 dark:border-neutral-700 dark:text-white"
+              />
+            </div>
+          </div>
+
+          {/* Quick Preset Buttons */}
+          <div className="space-y-1.5">
+            <span className="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
+              Pilihan Cepat Target Webhook:
+            </span>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setWebhookUrl("https://n8n.noud.web.id/webhook-test/kostChatbotz")}
+                className={`rounded-xl px-3 py-1.5 text-[11px] font-bold border transition-colors ${
+                  webhookUrl.includes("webhook-test")
+                    ? "border-[#D9FF43] bg-[#D9FF43]/20 text-neutral-900 dark:text-[#D9FF43]"
+                    : "border-neutral-200 text-neutral-600 dark:border-neutral-700 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-800"
+                }`}
+              >
+                🧪 Mode Test (/webhook-test/kostChatbotz)
+              </button>
+              <button
+                type="button"
+                onClick={() => setWebhookUrl("https://n8n.noud.web.id/webhook/kostChatbotz")}
+                className={`rounded-xl px-3 py-1.5 text-[11px] font-bold border transition-colors ${
+                  !webhookUrl.includes("webhook-test") && webhookUrl.includes("kostChatbotz")
+                    ? "border-[#D9FF43] bg-[#D9FF43]/20 text-neutral-900 dark:text-[#D9FF43]"
+                    : "border-neutral-200 text-neutral-600 dark:border-neutral-700 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-800"
+                }`}
+              >
+                🚀 Mode Production (/webhook/kostChatbotz)
+              </button>
+            </div>
+          </div>
+
+          {/* Guide / Instruction Box */}
+          <div className="rounded-2xl bg-amber-50 p-3.5 border border-amber-200/80 text-xs text-amber-900 dark:bg-amber-950/40 dark:border-amber-900/50 dark:text-amber-200 space-y-1">
+            <p className="font-bold flex items-center gap-1.5">
+              <Lightbulb className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <span>Petunjuk Alur n8n:</span>
+            </p>
+            <ul className="list-disc list-inside space-y-1 text-[11px] text-amber-800 dark:text-amber-300 pl-1">
+              <li>
+                Jika menggunakan <strong>Mode Test</strong>, buka canvas alur n8n Anda dan klik tombol <strong>&apos;Execute workflow&apos;</strong> sebelum mengetes.
+              </li>
+              <li>
+                Jika ingin berjalan otomatis 24/7, aktifkan saklar <strong>&apos;Active&apos; (ON)</strong> di pojok kanan atas n8n dan pilih <strong>Mode Production</strong>.
+              </li>
+            </ul>
+          </div>
+
+          {/* Test Ping Status */}
+          {testResult && (
+            <div
+              className={`rounded-2xl p-3 text-xs font-medium border ${
+                testResult.status === "success"
+                  ? "bg-emerald-50 text-emerald-900 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-200 dark:border-emerald-900"
+                  : testResult.status === "warning"
+                  ? "bg-amber-50 text-amber-900 border-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-900"
+                  : "bg-rose-50 text-rose-900 border-rose-200 dark:bg-rose-950/40 dark:text-rose-200 dark:border-rose-900"
+              }`}
+            >
+              <p className="font-bold mb-0.5">
+                {testResult.status === "success"
+                  ? "✅ Tes Berhasil"
+                  : testResult.status === "warning"
+                  ? "⚠️ Menunggu Trigger Kanvas"
+                  : "❌ Tes Gagal"}
+              </p>
+              <p className="text-[11px] leading-relaxed">{testResult.message}</p>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 pt-3 border-t border-neutral-200 dark:border-neutral-800">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isTestingWebhook}
+              onClick={handleTestWebhook}
+              className="gap-1.5 text-xs font-bold"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isTestingWebhook ? "animate-spin" : ""}`} />
+              <span>{isTestingWebhook ? "Menguji..." : "Ping Test Webhook"}</span>
+            </Button>
+
+            <div className="flex gap-2 justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsConfigModalOpen(false)}
+                className="text-xs"
+              >
+                Tutup
+              </Button>
+              <Button
+                type="button"
+                variant="lime"
+                size="sm"
+                onClick={handleSaveWebhookConfig}
+                className="text-xs font-black shadow-lime-glow"
+              >
+                Simpan Konfigurasi
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

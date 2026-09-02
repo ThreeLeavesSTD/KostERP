@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Room, Tenant } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { KostApiClient } from "@/lib/api-client";
 import { formatRupiah } from "@/lib/utils";
 import { notify } from "@/lib/notify";
 
@@ -36,27 +36,34 @@ export function LeaseModal({
 
   useEffect(() => {
     if (isOpen) {
-      const allRooms = KostStorage.getRooms();
-      const allTenants = KostStorage.getTenants();
-      setRooms(allRooms);
-      setTenants(allTenants);
+      let isMounted = true;
+      Promise.all([KostApiClient.getRooms(), KostApiClient.getTenants()])
+        .then(([allRooms, allTenants]) => {
+          if (!isMounted) return;
+          setRooms(allRooms);
+          setTenants(allTenants);
 
-      // Available rooms only or preselected
-      const availableRooms = allRooms.filter((r) => r.status === "available");
-      const defaultRoom = preselectedRoomId
-        ? allRooms.find((r) => r.id === preselectedRoomId)
-        : availableRooms[0];
+          const availableRooms = allRooms.filter((r) => r.status === "available");
+          const defaultRoom = preselectedRoomId
+            ? allRooms.find((r) => r.id === preselectedRoomId)
+            : availableRooms[0];
 
-      if (defaultRoom) {
-        setSelectedRoomId(defaultRoom.id);
-        setRentAmount(defaultRoom.base_price);
-      }
+          if (defaultRoom) {
+            setSelectedRoomId(defaultRoom.id);
+            setRentAmount(defaultRoom.base_price);
+          }
 
-      if (preselectedTenantId) {
-        setSelectedTenantId(preselectedTenantId);
-      } else if (allTenants.length > 0) {
-        setSelectedTenantId(allTenants[0].id);
-      }
+          if (preselectedTenantId) {
+            setSelectedTenantId(preselectedTenantId);
+          } else if (allTenants.length > 0) {
+            setSelectedTenantId(allTenants[0].id);
+          }
+        })
+        .catch((err) => console.error("Gagal memuat room/tenant:", err));
+
+      return () => {
+        isMounted = false;
+      };
     }
   }, [isOpen, preselectedRoomId, preselectedTenantId]);
 
@@ -68,7 +75,7 @@ export function LeaseModal({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRoomId) {
       notify.warning("Pilih Kamar", "Silakan pilih unit kamar yang akan disewa.");
@@ -79,31 +86,37 @@ export function LeaseModal({
       return;
     }
 
-    const props = KostStorage.getProperties();
-    const property_id = props[0]?.id && props[0].id.includes("-") && props[0].id.length > 20
-      ? props[0].id
-      : "a0000000-0000-0000-0000-000000000001";
-
     // Calculate End Date
     const start = new Date(startDate);
     const end = new Date(start);
     end.setMonth(end.getMonth() + durationMonths);
     const endDateStr = end.toISOString().slice(0, 10);
 
-    KostStorage.createLease({
-      property_id,
-      room_id: selectedRoomId,
-      tenant_id: selectedTenantId,
-      start_date: startDate,
-      end_date: endDateStr,
-      billing_cycle_day: Number(billingCycleDay),
-      rent_amount: Number(rentAmount),
-      deposit_amount: Number(depositAmount),
-    });
+    try {
+      await KostApiClient.createLease({
+        room_id: selectedRoomId,
+        tenant_id: selectedTenantId,
+        start_date: startDate,
+        end_date: endDateStr,
+        billing_cycle_day: Number(billingCycleDay),
+        rent_amount: Number(rentAmount),
+        deposit_amount: Number(depositAmount),
+        status: "active",
+      });
 
-    notify.success("Kontrak Sewa Aktif", "Kontrak sewa berhasil dibuat dan tagihan perdana telah diterbitkan.");
-    onSuccess();
-    onClose();
+      // Update status kamar menjadi occupied
+      await KostApiClient.updateRoom(selectedRoomId, { status: "occupied" });
+
+      notify.success("Kontrak Sewa Aktif", "Kontrak sewa berhasil dibuat.");
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      notify.alert({
+        title: "Gagal Membuat Kontrak",
+        message: err.message || "Terjadi kesalahan saat menghubungi server.",
+        variant: "danger",
+      });
+    }
   };
 
   return (

@@ -5,7 +5,7 @@ import { User, Phone, ShieldCheck, UserCheck, Key, Calendar } from "lucide-react
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Room, RoomStatus, Tenant } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { KostApiClient } from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
 import { notify } from "@/lib/notify";
 
@@ -48,8 +48,12 @@ export function RoomModal({ isOpen, onClose, roomToEdit, onSuccess }: RoomModalP
   const [leaseEndDate, setLeaseEndDate] = useState<string>("");
 
   useEffect(() => {
-    const allTenants = KostStorage.getTenants();
-    setTenantsList(allTenants);
+    let isMounted = true;
+    KostApiClient.getTenants()
+      .then((data) => {
+        if (isMounted) setTenantsList(data);
+      })
+      .catch((err) => console.error("Gagal memuat daftar tenant:", err));
 
     if (roomToEdit) {
       setRoomNumber(roomToEdit.room_number);
@@ -72,6 +76,10 @@ export function RoomModal({ isOpen, onClose, roomToEdit, onSuccess }: RoomModalP
       setSelectedTenantId("");
       setLeaseEndDate("");
     }
+
+    return () => {
+      isMounted = false;
+    };
   }, [roomToEdit, isOpen]);
 
   const toggleFacility = (fac: string) => {
@@ -99,56 +107,49 @@ export function RoomModal({ isOpen, onClose, roomToEdit, onSuccess }: RoomModalP
 
   const selectedTenantObj = tenantsList.find((t) => t.id === selectedTenantId);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!roomNumber.trim()) {
       notify.warning("Nomor Kamar Wajib Diisi", "Silakan masukkan nomor unit kamar.");
       return;
     }
 
-    if (roomToEdit) {
-      KostStorage.updateRoom(roomToEdit.id, {
-        room_number: roomNumber.trim(),
-        floor: Number(floor),
-        room_type: roomType,
-        base_price: Number(basePrice),
-        status,
-        facilities,
-        notes,
-        tenant_id: selectedTenantId || undefined,
-      });
+    try {
+      if (roomToEdit) {
+        await KostApiClient.updateRoom(roomToEdit.id, {
+          room_number: roomNumber.trim(),
+          floor: Number(floor),
+          room_type: roomType,
+          base_price: Number(basePrice),
+          status,
+          facilities,
+          notes,
+        });
 
-      if (selectedTenantId) {
-        KostStorage.assignTenantToRoom(roomToEdit.id, selectedTenantId, leaseEndDate);
-      } else if (status !== "occupied") {
-        KostStorage.assignTenantToRoom(roomToEdit.id, null);
-      }
-      notify.success("Kamar Diperbarui", `Perubahan data Kamar ${roomNumber.trim()} berhasil disimpan.`);
-    } else {
-      const props = KostStorage.getProperties();
-      const property_id = props[0]?.id && props[0].id.includes("-") && props[0].id.length > 20
-        ? props[0].id
-        : "a0000000-0000-0000-0000-000000000001";
-      const created = KostStorage.addRoom({
-        property_id,
-        room_number: roomNumber.trim(),
-        floor: Number(floor),
-        room_type: roomType,
-        base_price: Number(basePrice),
-        status: selectedTenantId ? "occupied" : status,
-        facilities,
-        notes,
-        tenant_id: selectedTenantId || undefined,
-      });
+        notify.success("Kamar Diperbarui", `Perubahan data Kamar ${roomNumber.trim()} berhasil disimpan.`);
+      } else {
+        await KostApiClient.createRoom({
+          room_number: roomNumber.trim(),
+          floor: Number(floor),
+          room_type: roomType,
+          base_price: Number(basePrice),
+          status,
+          facilities,
+          notes,
+        });
 
-      if (selectedTenantId) {
-        KostStorage.assignTenantToRoom(created.id, selectedTenantId, leaseEndDate);
+        notify.success("Kamar Ditambahkan", `Kamar ${roomNumber.trim()} berhasil didaftarkan ke sistem.`);
       }
-      notify.success("Kamar Ditambahkan", `Kamar ${roomNumber.trim()} berhasil didaftarkan ke sistem.`);
+
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      notify.alert({
+        title: "Gagal Menyimpan Kamar",
+        message: err.message || "Terjadi kesalahan saat menghubungi server.",
+        variant: "danger",
+      });
     }
-
-    onSuccess();
-    onClose();
   };
 
   return (

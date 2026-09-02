@@ -5,7 +5,7 @@ import { Plus, Trash2, Receipt, Calendar, DoorClosed, User, DollarSign, FileText
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Invoice, Room, Tenant, InvoiceItem } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { KostApiClient } from "@/lib/api-client";
 import { formatRupiah } from "@/lib/utils";
 import { notify } from "@/lib/notify";
 
@@ -37,46 +37,54 @@ export function InvoiceFormModal({
   ]);
 
   useEffect(() => {
-    const loadedRooms = KostStorage.getRooms();
-    const loadedTenants = KostStorage.getTenants();
-    setRooms(loadedRooms);
-    setTenants(loadedTenants);
+    let isMounted = true;
+    Promise.all([KostApiClient.getRooms(), KostApiClient.getTenants()])
+      .then(([loadedRooms, loadedTenants]) => {
+        if (!isMounted) return;
+        setRooms(loadedRooms);
+        setTenants(loadedTenants);
 
-    if (invoiceToEdit) {
-      setBillingPeriod(invoiceToEdit.billing_period || new Date().toISOString().slice(0, 7));
-      setDueDate(invoiceToEdit.due_date || "");
-      setNotes(invoiceToEdit.notes || "");
-      
-      const foundRoom = loadedRooms.find((r) => r.room_number === invoiceToEdit.room_number);
-      if (foundRoom) {
-        setSelectedRoomId(foundRoom.id);
-        setSelectedTenantId(foundRoom.tenant_id || foundRoom.current_tenant?.id || "");
-      }
+        if (invoiceToEdit) {
+          setBillingPeriod(invoiceToEdit.billing_period || new Date().toISOString().slice(0, 7));
+          setDueDate(invoiceToEdit.due_date || "");
+          setNotes(invoiceToEdit.notes || "");
+          
+          const foundRoom = loadedRooms.find((r) => r.room_number === invoiceToEdit.room_number);
+          if (foundRoom) {
+            setSelectedRoomId(foundRoom.id);
+            setSelectedTenantId(foundRoom.tenant_id || foundRoom.current_tenant?.id || "");
+          }
 
-      if (invoiceToEdit.items && invoiceToEdit.items.length > 0) {
-        setItems(invoiceToEdit.items);
-      } else {
-        const defaultItems: InvoiceItem[] = [
-          { id: "item-rent", description: "Biaya Sewa Pokok Kamar", amount: invoiceToEdit.subtotal_rent || 0 },
-        ];
-        if (invoiceToEdit.additional_fees > 0) {
-          defaultItems.push({
-            id: "item-fees",
-            description: "Biaya Tambahan / Token PLN",
-            amount: invoiceToEdit.additional_fees,
-          });
+          if (invoiceToEdit.items && invoiceToEdit.items.length > 0) {
+            setItems(invoiceToEdit.items);
+          } else {
+            const defaultItems: InvoiceItem[] = [
+              { id: "item-rent", description: "Biaya Sewa Pokok Kamar", amount: invoiceToEdit.subtotal_rent || 0 },
+            ];
+            if (invoiceToEdit.additional_fees > 0) {
+              defaultItems.push({
+                id: "item-fees",
+                description: "Biaya Tambahan / Token PLN",
+                amount: invoiceToEdit.additional_fees,
+              });
+            }
+            setItems(defaultItems);
+          }
+        } else {
+          const defaultDue = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+          setDueDate(defaultDue);
+          setBillingPeriod(new Date().toISOString().slice(0, 7));
+          setSelectedRoomId("");
+          setSelectedTenantId("");
+          setNotes("");
+          setItems([{ id: "item-1", description: "Biaya Sewa Pokok Kamar", amount: 1800000 }]);
         }
-        setItems(defaultItems);
-      }
-    } else {
-      const defaultDue = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-      setDueDate(defaultDue);
-      setBillingPeriod(new Date().toISOString().slice(0, 7));
-      setSelectedRoomId("");
-      setSelectedTenantId("");
-      setNotes("");
-      setItems([{ id: "item-1", description: "Biaya Sewa Pokok Kamar", amount: 1800000 }]);
-    }
+      })
+      .catch((err) => console.error("Gagal memuat room/tenant:", err));
+
+    return () => {
+      isMounted = false;
+    };
   }, [invoiceToEdit, isOpen]);
 
   const handleRoomChange = (roomId: string) => {
@@ -123,7 +131,7 @@ export function InvoiceFormModal({
   const subtotalRent = items[0]?.amount || 0;
   const additionalFees = items.slice(1).reduce((sum, item) => sum + (item.amount || 0), 0);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const selectedRoom = rooms.find((r) => r.id === selectedRoomId);
@@ -142,44 +150,43 @@ export function InvoiceFormModal({
       ? selectedTenant.phone_number
       : selectedRoom?.current_tenant?.phone_number || invoiceToEdit?.tenant_phone || "";
 
-    if (invoiceToEdit) {
-      KostStorage.updateInvoice(invoiceToEdit.id, {
-        billing_period: billingPeriod,
-        due_date: dueDate,
-        items,
-        subtotal_rent: subtotalRent,
-        additional_fees: additionalFees,
-        total_amount: totalAmount,
-        notes: notes.trim() || `Tagihan Sewa Kamar ${roomNumber} Periode ${billingPeriod}`,
-        room_number: roomNumber,
-        tenant_name: tenantName,
-        tenant_phone: tenantPhone,
-      });
-      notify.success("Faktur Diperbarui", `Faktur tagihan Kamar ${roomNumber} berhasil diperbarui.`);
-    } else {
-      const invNumber = `INV/${billingPeriod.replace("-", "")}/${Math.floor(100 + Math.random() * 900)}`;
-      KostStorage.addInvoice({
-        property_id: selectedRoom?.property_id || "a0000000-0000-0000-0000-000000000001",
-        lease_id: selectedRoom?.current_tenant?.lease_id || `lease-${selectedRoom?.id}`,
-        room_id: selectedRoom?.id,
-        invoice_number: invNumber,
-        billing_period: billingPeriod,
-        items,
-        subtotal_rent: subtotalRent,
-        additional_fees: additionalFees,
-        notes: notes.trim() || `Tagihan Sewa Kamar ${roomNumber} Periode ${billingPeriod}`,
-        total_amount: totalAmount,
-        due_date: dueDate,
-        status: "unpaid",
-        room_number: roomNumber,
-        tenant_name: tenantName,
-        tenant_phone: tenantPhone,
-      });
-      notify.success("Faktur Diterbitkan", `Faktur tagihan ${invNumber} untuk Kamar ${roomNumber} berhasil dibuat.`);
-    }
+    try {
+      if (invoiceToEdit) {
+        await KostApiClient.updateInvoice(invoiceToEdit.id, {
+          billing_period: billingPeriod,
+          due_date: dueDate,
+          subtotal_rent: subtotalRent,
+          additional_fees: additionalFees,
+          total_amount: totalAmount,
+          notes: notes.trim() || `Tagihan Sewa Kamar ${roomNumber} Periode ${billingPeriod}`,
+        });
+        notify.success("Faktur Diperbarui", `Faktur tagihan Kamar ${roomNumber} berhasil diperbarui.`);
+      } else {
+        const invNumber = `INV/${billingPeriod.replace("-", "")}/${Math.floor(100 + Math.random() * 900)}`;
+        await KostApiClient.createInvoice({
+          lease_id: selectedRoom?.current_tenant?.lease_id || undefined,
+          room_id: selectedRoom?.id,
+          invoice_number: invNumber,
+          billing_period: billingPeriod,
+          subtotal_rent: subtotalRent,
+          additional_fees: additionalFees,
+          notes: notes.trim() || `Tagihan Sewa Kamar ${roomNumber} Periode ${billingPeriod}`,
+          total_amount: totalAmount,
+          due_date: dueDate,
+          status: "unpaid",
+        });
+        notify.success("Faktur Diterbitkan", `Faktur tagihan ${invNumber} untuk Kamar ${roomNumber} berhasil dibuat.`);
+      }
 
-    onSuccess();
-    onClose();
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      notify.alert({
+        title: "Gagal Menyimpan Faktur",
+        message: err.message || "Terjadi kesalahan pada database.",
+        variant: "danger",
+      });
+    }
   };
 
   return (

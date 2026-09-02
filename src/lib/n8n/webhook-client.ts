@@ -164,7 +164,7 @@ Pesan ini berfungsi sebagai bukti pembayaran resmi kost. Terima kasih atas kerja
 };
 
 /**
- * Trigger n8n Webhook
+ * Trigger n8n Webhook (General Dispatches)
  */
 export async function sendWebhookToN8n(endpointUrl: string, payload: Record<string, unknown>) {
   try {
@@ -185,5 +185,50 @@ export async function sendWebhookToN8n(endpointUrl: string, payload: Record<stri
     const message = error instanceof Error ? error.message : "Gagal terhubung ke webhook n8n";
     console.warn("n8n Webhook notice:", message);
     return { success: false, message };
+  }
+}
+
+export interface ChatbotWebhookResponse {
+  success: boolean;
+  reply?: string;
+  actionType?: "rooms" | "invoices" | "electricity" | "revenue" | "cashflow" | "general";
+  actionData?: any;
+  source?: "n8n_webhook" | "local_fallback";
+  isTestInactive?: boolean;
+  isNoItemFound?: boolean;
+  hint?: string;
+  error?: string;
+}
+
+/**
+ * Send message from Kost Concierge Chatbot to n8n Webhook
+ */
+export async function sendChatbotMessageToN8n(
+  message: string,
+  context?: Record<string, unknown>,
+  customWebhookUrl?: string
+): Promise<ChatbotWebhookResponse> {
+  try {
+    const response = await fetch("/api/assistant/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message,
+        context,
+        webhook_url: customWebhookUrl,
+      }),
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : "Network error";
+    return {
+      success: false,
+      error: errorMsg,
+      source: "local_fallback",
+    };
   }
 }

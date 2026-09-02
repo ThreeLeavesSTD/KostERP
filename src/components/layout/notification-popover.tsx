@@ -17,8 +17,8 @@ import {
   ShieldCheck,
   Layers,
 } from "lucide-react";
-import { KostStorage } from "@/lib/storage";
 import { RoomComplaint, Invoice, ElectricityTransaction } from "@/types";
+import { KostApiClient } from "@/lib/api-client";
 import { formatRupiah, formatDateIndo } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,74 +47,75 @@ export function NotificationPopover({ onNavigateTab }: NotificationPopoverProps)
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const popoverRef = useRef<HTMLDivElement>(null);
 
-  const loadNotifications = () => {
-    const complaints = KostStorage.getComplaints();
-    const invoices = KostStorage.getInvoices();
-    const electricity = KostStorage.getElectricityTransactions();
+  const loadNotifications = async () => {
+    try {
+      const [complaints, invoices, electricity] = await Promise.all([
+        KostApiClient.getComplaints().catch(() => []),
+        KostApiClient.getInvoices().catch(() => []),
+        KostApiClient.getElectricityTransactions().catch(() => []),
+      ]);
 
-    const items: SystemNotification[] = [];
+      const items: SystemNotification[] = [];
 
-    // 1. WhatsApp CS AI Complaints Notifications
-    complaints.forEach((c) => {
-      if (c.status === "pending" || c.status === "in_progress") {
-        items.push({
-          id: `notif-comp-${c.id}`,
-          type: "complaint",
-          title: `Keluhan WA AI: Kamar ${c.room_number}`,
-          description: `"${c.ai_extracted_summary}" · Pelapor: ${c.tenant_name.split(" ")[0]}`,
-          timestamp: c.created_at,
-          timeAgo: formatTimeAgo(c.created_at),
-          priority: c.priority,
-          targetTab: "rooms",
-          isRead: readIds.has(`notif-comp-${c.id}`),
-          metadata: { complaintId: c.id, roomNumber: c.room_number },
-        });
-      }
-    });
-
-    // 2. Unpaid & Overdue Invoices
-    invoices.forEach((inv) => {
-      if (inv.status === "unpaid" || inv.status === "overdue") {
-        items.push({
-          id: `notif-inv-${inv.id}`,
-          type: "billing",
-          title: `Tagihan Belum Lunas: Kamar ${inv.room_number}`,
-          description: `Sewa ${formatRupiah(inv.total_amount)} belum dibayar (${inv.tenant_name || "Penghuni"}).`,
-          timestamp: inv.due_date,
-          timeAgo: `Jatuh tempo ${new Date(inv.due_date).toLocaleDateString("id-ID")}`,
-          priority: inv.status === "overdue" ? "urgent" : "medium",
-          targetTab: "billing",
-          isRead: readIds.has(`notif-inv-${inv.id}`),
-          metadata: { invoiceId: inv.id },
-        });
-      }
-    });
-
-    // 3. Recent Electricity Transactions
-    electricity.slice(0, 3).forEach((el) => {
-      items.push({
-        id: `notif-el-${el.id}`,
-        type: "electricity",
-        title: `Distribusi Token PLN: Kamar ${el.room_number}`,
-        description: `Token ${formatRupiah(el.selling_price)} (+Laba ${formatRupiah(el.profit_margin)}) dikirim via WA.`,
-        timestamp: el.created_at,
-        timeAgo: formatTimeAgo(el.created_at),
-        priority: "low",
-        targetTab: "electricity",
-        isRead: readIds.has(`notif-el-${el.id}`),
-        metadata: { electricityId: el.id },
+      // 1. WhatsApp CS AI Complaints Notifications
+      complaints.forEach((c) => {
+        if (c.status === "pending" || c.status === "in_progress") {
+          items.push({
+            id: `notif-comp-${c.id}`,
+            type: "complaint",
+            title: `Keluhan WA AI: Kamar ${c.room_number}`,
+            description: `"${c.ai_extracted_summary}" · Pelapor: ${c.tenant_name.split(" ")[0]}`,
+            timestamp: c.created_at,
+            timeAgo: formatTimeAgo(c.created_at),
+            priority: c.priority,
+            targetTab: "rooms",
+            isRead: readIds.has(`notif-comp-${c.id}`),
+            metadata: { complaintId: c.id, roomNumber: c.room_number },
+          });
+        }
       });
-    });
 
-    // Sort by priority and timestamp
-    setNotifications(items);
+      // 2. Unpaid & Overdue Invoices
+      invoices.forEach((inv) => {
+        if (inv.status === "unpaid" || inv.status === "overdue") {
+          items.push({
+            id: `notif-inv-${inv.id}`,
+            type: "billing",
+            title: `Tagihan Belum Lunas: Kamar ${inv.room_number}`,
+            description: `Sewa ${formatRupiah(inv.total_amount)} belum dibayar (${inv.tenant_name || "Penghuni"}).`,
+            timestamp: inv.due_date,
+            timeAgo: `Jatuh tempo ${new Date(inv.due_date).toLocaleDateString("id-ID")}`,
+            priority: inv.status === "overdue" ? "urgent" : "medium",
+            targetTab: "billing",
+            isRead: readIds.has(`notif-inv-${inv.id}`),
+            metadata: { invoiceId: inv.id },
+          });
+        }
+      });
+
+      // 3. Recent Electricity Transactions
+      electricity.slice(0, 3).forEach((el) => {
+        items.push({
+          id: `notif-el-${el.id}`,
+          type: "electricity",
+          title: `Distribusi Token PLN: Kamar ${el.room_number}`,
+          description: `Token ${formatRupiah(el.selling_price)} dikirim via WA.`,
+          timestamp: el.created_at,
+          timeAgo: formatTimeAgo(el.created_at),
+          priority: "low",
+          targetTab: "electricity",
+          isRead: readIds.has(`notif-el-${el.id}`),
+          metadata: { electricityId: el.id },
+        });
+      });
+
+      // Sort by priority and timestamp
+      setNotifications(items);
+    } catch {}
   };
 
   useEffect(() => {
     loadNotifications();
-    const handleStorageChange = () => loadNotifications();
-    window.addEventListener("kost_storage_change", handleStorageChange);
-    return () => window.removeEventListener("kost_storage_change", handleStorageChange);
   }, [readIds]);
 
   // Outside click listener

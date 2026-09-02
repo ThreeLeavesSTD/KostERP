@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { ElectricityTransaction } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { KostApiClient } from "@/lib/api-client";
 import {
   WhatsAppTemplates,
   sendWebhookToN8n,
@@ -66,7 +66,9 @@ export function TokenDispatchDialog({
     });
 
     setIsSendingWebhook(false);
-    KostStorage.markTokenSent(transaction.id);
+    try {
+      await KostApiClient.updateElectricityTransaction(transaction.id, { sent_at: new Date().toISOString() });
+    } catch {}
 
     if (res.success) {
       setStatusMessage({

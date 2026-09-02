@@ -3,7 +3,7 @@
 import React from "react";
 import { LayoutDashboard, DoorClosed, Users, Zap, Receipt, FileSpreadsheet, CreditCard, Sparkles, UserPlus, User, Wallet } from "lucide-react";
 import { UserRole } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { hasPermission } from "@/lib/permissions";
 
 interface MobileNavProps {
   currentRole: UserRole;
@@ -26,7 +26,7 @@ export function MobileNav({ currentRole, activeTab, onTabChange }: MobileNavProp
   ];
 
   const items = allMobileItems.filter((item) =>
-    KostStorage.hasPermission(currentRole, item.id)
+    hasPermission(currentRole, item.id)
   );
 
   return (

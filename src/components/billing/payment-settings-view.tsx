@@ -3,15 +3,28 @@
 import React, { useState, useEffect } from "react";
 import { CreditCard, Plus, Save, Trash2, CheckCircle2, QrCode } from "lucide-react";
 import { PaymentMethodConfig } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { KostApiClient } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 
 export function PaymentSettingsView() {
   const [methods, setMethods] = useState<PaymentMethodConfig[]>([]);
   const [isSaved, setIsSaved] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const data = await KostApiClient.getPaymentMethods();
+      setMethods(data);
+    } catch (err) {
+      console.error("Gagal memuat metode pembayaran:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    setMethods(KostStorage.getPaymentMethods());
+    loadData();
   }, []);
 
   const handleUpdateField = (id: string, field: keyof PaymentMethodConfig, value: any) => {
@@ -25,10 +38,9 @@ export function PaymentSettingsView() {
   };
 
   const handleAddMethod = () => {
-    const props = KostStorage.getProperties();
     const newMethod: PaymentMethodConfig = {
-      id: `pm-${Date.now()}`,
-      property_id: props[0]?.id || "prop-01",
+      id: `temp-${Date.now()}`,
+      property_id: "",
       bank_name: "BCA",
       account_number: "",
       account_holder: "",
@@ -38,14 +50,46 @@ export function PaymentSettingsView() {
     setMethods([...methods, newMethod]);
   };
 
-  const handleDeleteMethod = (id: string) => {
-    setMethods(methods.filter((m) => m.id !== id));
+  const handleDeleteMethod = async (id: string) => {
+    if (id.startsWith("temp-")) {
+      setMethods(methods.filter((m) => m.id !== id));
+      return;
+    }
+    try {
+      await KostApiClient.deletePaymentMethod(id);
+      await loadData();
+    } catch (err: any) {
+      alert(`Gagal menghapus metode pembayaran: ${err.message}`);
+    }
   };
 
-  const handleSave = () => {
-    KostStorage.updatePaymentMethods(methods);
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 2500);
+  const handleSave = async () => {
+    try {
+      for (const m of methods) {
+        if (m.id.startsWith("temp-")) {
+          await KostApiClient.createPaymentMethod({
+            bank_name: m.bank_name,
+            account_number: m.account_number,
+            account_holder: m.account_holder,
+            instructions: m.instructions,
+            is_active: m.is_active,
+          });
+        } else {
+          await KostApiClient.updatePaymentMethod(m.id, {
+            bank_name: m.bank_name,
+            account_number: m.account_number,
+            account_holder: m.account_holder,
+            instructions: m.instructions,
+            is_active: m.is_active,
+          });
+        }
+      }
+      await loadData();
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 2500);
+    } catch (err: any) {
+      alert(`Gagal menyimpan konfigurasi: ${err.message}`);
+    }
   };
 
   return (
@@ -108,57 +152,54 @@ export function PaymentSettingsView() {
                   <span className="text-neutral-700 dark:text-neutral-300">Aktif</span>
                 </label>
                 <button
+                  type="button"
                   onClick={() => handleDeleteMethod(pm.id)}
-                  title="Hapus"
-                  className="rounded-full p-2 text-neutral-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 transition-colors"
+                  className="rounded-full p-1 text-neutral-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
             </div>
 
-            <div className="mt-4 space-y-3 text-xs">
-              {pm.bank_name !== "QRIS" && pm.bank_name !== "Tunai / Cash" ? (
-                <>
-                  <div>
-                    <label className="block text-[11px] font-bold text-neutral-500">
-                      Nomor Rekening
-                    </label>
-                    <input
-                      type="text"
-                      value={pm.account_number || ""}
-                      onChange={(e) => handleUpdateField(pm.id, "account_number", e.target.value)}
-                      placeholder="Contoh: 8830-1928-44"
-                      className="mt-1 w-full rounded-2xl border border-neutral-200/80 bg-neutral-50 px-4 py-2.5 font-mono text-xs font-bold dark:bg-neutral-800 dark:border-neutral-700 dark:text-white focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-neutral-500">
-                      Nama Pemilik Rekening (Atas Nama)
-                    </label>
-                    <input
-                      type="text"
-                      value={pm.account_holder || ""}
-                      onChange={(e) => handleUpdateField(pm.id, "account_holder", e.target.value)}
-                      placeholder="Contoh: PT Graha Kost Mandiri"
-                      className="mt-1 w-full rounded-2xl border border-neutral-200/80 bg-neutral-50 px-4 py-2.5 text-xs font-semibold dark:bg-neutral-800 dark:border-neutral-700 dark:text-white focus:outline-none"
-                    />
-                  </div>
-                </>
-              ) : (
-                <div>
-                  <label className="block text-[11px] font-bold text-neutral-500">
-                    Instruksi / Catatan Pembayaran
-                  </label>
-                  <input
-                    type="text"
-                    value={pm.instructions || ""}
-                    onChange={(e) => handleUpdateField(pm.id, "instructions", e.target.value)}
-                    placeholder="Contoh: Scan QRIS via GoPay / BCA Mobile"
-                    className="mt-1 w-full rounded-2xl border border-neutral-200/80 bg-neutral-50 px-4 py-2.5 text-xs font-semibold dark:bg-neutral-800 dark:border-neutral-700 dark:text-white focus:outline-none"
-                  />
-                </div>
-              )}
+            <div className="space-y-3 pt-4">
+              <div>
+                <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+                  Nomor Rekening / Merchant ID
+                </label>
+                <input
+                  type="text"
+                  value={pm.account_number}
+                  onChange={(e) => handleUpdateField(pm.id, "account_number", e.target.value)}
+                  placeholder="Contoh: 1234567890"
+                  className="mt-1 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm font-bold text-neutral-900 focus:border-[#0A0A0A] focus:outline-none dark:border-neutral-700 dark:bg-neutral-800 dark:text-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+                  Atas Nama (Pemilik Rekening)
+                </label>
+                <input
+                  type="text"
+                  value={pm.account_holder}
+                  onChange={(e) => handleUpdateField(pm.id, "account_holder", e.target.value)}
+                  placeholder="Contoh: Haji Slamet Riyadi"
+                  className="mt-1 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm font-semibold text-neutral-900 focus:border-[#0A0A0A] focus:outline-none dark:border-neutral-700 dark:bg-neutral-800 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+                  Instruksi / Catatan Tambahan
+                </label>
+                <input
+                  type="text"
+                  value={pm.instructions || ""}
+                  onChange={(e) => handleUpdateField(pm.id, "instructions", e.target.value)}
+                  placeholder="Contoh: Berita transfer: Sewa Kamar [No.Kamar]"
+                  className="mt-1 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs font-medium text-neutral-600 focus:border-[#0A0A0A] focus:outline-none dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300"
+                />
+              </div>
             </div>
           </div>
         ))}

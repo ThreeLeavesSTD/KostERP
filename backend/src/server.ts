@@ -12,6 +12,11 @@ import electricityRoutes from "./routes/electricity.routes";
 import complaintsRoutes from "./routes/complaints.routes";
 import financeRoutes from "./routes/finance.routes";
 import webhooksRoutes from "./routes/webhooks.routes";
+import authRoutes from "./routes/auth.routes";
+import dashboardRoutes from "./routes/dashboard.routes";
+import paymentMethodsRoutes from "./routes/payment-methods.routes";
+import staffRoutes from "./routes/staff.routes";
+import { requireAuth } from "./middleware/auth";
 
 dotenv.config();
 
@@ -50,17 +55,24 @@ app.get("/health", (req: Request, res: Response) => {
   });
 });
 
-// API Routes
-app.use("/api/properties", propertiesRoutes);
-app.use("/api/rooms", roomsRoutes);
-app.use("/api/tenants", tenantsRoutes);
-app.use("/api/leases", leasesRoutes);
-app.use("/api/invoices", invoicesRoutes);
-app.use("/api/payments", paymentsRoutes);
-app.use("/api/electricity", electricityRoutes);
-app.use("/api/complaints", complaintsRoutes);
-app.use("/api/finance", financeRoutes);
-app.use("/api/webhooks", webhooksRoutes);
+// API Routes - Public
+app.use("/api/webhooks", webhooksRoutes); // Dipanggil n8n / WA provider (tanpa user JWT)
+
+// API Routes - Auth
+app.use("/api/auth", authRoutes); // Menggunakan requireAuth di dalam router
+
+app.use("/api/dashboard", requireAuth, dashboardRoutes);
+app.use("/api/properties", requireAuth, propertiesRoutes);
+app.use("/api/rooms", requireAuth, roomsRoutes);
+app.use("/api/tenants", requireAuth, tenantsRoutes);
+app.use("/api/leases", requireAuth, leasesRoutes);
+app.use("/api/invoices", requireAuth, invoicesRoutes);
+app.use("/api/payments", requireAuth, paymentsRoutes);
+app.use("/api/payment-methods", requireAuth, paymentMethodsRoutes);
+app.use("/api/electricity", requireAuth, electricityRoutes);
+app.use("/api/complaints", requireAuth, complaintsRoutes);
+app.use("/api/finance", requireAuth, financeRoutes);
+app.use("/api/staff", requireAuth, staffRoutes);
 
 // Global Error Handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {

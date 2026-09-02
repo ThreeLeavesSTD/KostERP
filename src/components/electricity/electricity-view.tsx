@@ -14,7 +14,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { ElectricityTransaction } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { KostApiClient } from "@/lib/api-client";
 import {
   formatRupiah,
   formatDateIndo,
@@ -33,15 +33,22 @@ export function ElectricityView() {
     useState<ElectricityTransaction | null>(null);
   const [copiedTokenId, setCopiedTokenId] = useState<string | null>(null);
 
-  const loadData = () => {
-    setTransactions(KostStorage.getElectricityTransactions());
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const data = await KostApiClient.getElectricityTransactions();
+      setTransactions(data);
+    } catch (err) {
+      console.error("Gagal memuat transaksi listrik:", err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
     loadData();
-    const handleStorageChange = () => loadData();
-    window.addEventListener("kost_storage_change", handleStorageChange);
-    return () => window.removeEventListener("kost_storage_change", handleStorageChange);
   }, []);
 
   const filtered = transactions.filter((t) => {
@@ -279,15 +286,16 @@ export function ElectricityView() {
       <TokenPurchaseModal
         isOpen={isPurchaseModalOpen}
         onClose={() => setIsPurchaseModalOpen(false)}
-        onSuccess={(txId) => {
-          loadData();
+        onSuccess={async (txId) => {
+          await loadData();
           if (txId) {
-            const newlyCreated = KostStorage.getElectricityTransactions().find(
-              (t) => t.id === txId
-            );
-            if (newlyCreated) {
-              setSelectedTxForDispatch(newlyCreated);
-            }
+            try {
+              const list = await KostApiClient.getElectricityTransactions();
+              const newlyCreated = list.find((t) => t.id === txId);
+              if (newlyCreated) {
+                setSelectedTxForDispatch(newlyCreated);
+              }
+            } catch {}
           }
         }}
       />

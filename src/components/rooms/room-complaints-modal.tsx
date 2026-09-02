@@ -22,7 +22,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { RoomComplaint, ComplaintStatus, ComplaintPriority, ComplaintCategory } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { KostApiClient } from "@/lib/api-client";
 import { formatDateIndo } from "@/lib/utils";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
@@ -63,25 +63,33 @@ export function RoomComplaintsModal({
     selectedComplaint ||
     (complaints.length > 0 ? complaints[0] : null);
 
-  const handleUpdateStatus = (id: string, newStatus: ComplaintStatus) => {
-    KostStorage.updateComplaint(id, {
-      status: newStatus,
-      resolution_notes: resolutionNotes || activeComplaint?.resolution_notes,
-      assigned_staff_name: assignedStaff || activeComplaint?.assigned_staff_name,
-    });
-    onRefresh();
+  const handleUpdateStatus = async (id: string, newStatus: ComplaintStatus) => {
+    try {
+      await KostApiClient.updateComplaint(id, {
+        status: newStatus,
+        resolution_notes: resolutionNotes || activeComplaint?.resolution_notes,
+        assigned_staff_name: assignedStaff || activeComplaint?.assigned_staff_name,
+      });
+      onRefresh();
+    } catch (err: any) {
+      notify.alert({ title: "Gagal Update Status", message: err.message, variant: "danger" });
+    }
   };
 
-  const handleSaveNotes = (e: React.FormEvent) => {
+  const handleSaveNotes = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeComplaint) return;
 
-    KostStorage.updateComplaint(activeComplaint.id, {
-      resolution_notes: resolutionNotes,
-      assigned_staff_name: assignedStaff,
-    });
-    notify.success("Penanganan Disimpan", "Catatan penanganan komplain berhasil disimpan ke database.");
-    onRefresh();
+    try {
+      await KostApiClient.updateComplaint(activeComplaint.id, {
+        resolution_notes: resolutionNotes,
+        assigned_staff_name: assignedStaff,
+      });
+      notify.success("Penanganan Disimpan", "Catatan penanganan komplain berhasil disimpan ke database.");
+      onRefresh();
+    } catch (err: any) {
+      notify.alert({ title: "Gagal Menyimpan Catatan", message: err.message, variant: "danger" });
+    }
   };
 
   const handleReplyWhatsApp = (c: RoomComplaint) => {
@@ -103,24 +111,32 @@ ${c.resolution_notes ? `Catatan Pengelola: "${c.resolution_notes}"\n\n` : ""}Jik
     window.open(url, "_blank");
   };
 
-  const handleRunSimulation = (e: React.FormEvent) => {
+  const handleRunSimulation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!simMessage.trim()) return;
 
-    const newComp = KostStorage.simulateWhatsAppCSIncoming({
-      room_number: simRoomNumber,
-      tenant_name: simTenantName,
-      tenant_phone: simTenantPhone,
-      message: simMessage,
-    });
+    try {
+      const created = await KostApiClient.createComplaint({
+        room_number: simRoomNumber,
+        tenant_name: simTenantName,
+        tenant_phone: simTenantPhone,
+        raw_chat_message: simMessage,
+        ai_extracted_summary: simMessage.slice(0, 100),
+        category: "general",
+        priority: "medium",
+        status: "pending",
+      });
 
-    setIsSimulating(false);
-    setSelectedComplaint(newComp);
-    onRefresh();
-    notify.success(
-      "Tiket CS AI Dibuat",
-      `Laporan dari ${simTenantName} (Kamar ${simRoomNumber}) berhasil dianalisis CS AI dan tersimpan ke database.`
-    );
+      setIsSimulating(false);
+      setSelectedComplaint(created);
+      onRefresh();
+      notify.success(
+        "Tiket CS AI Dibuat",
+        `Laporan dari ${simTenantName} (Kamar ${simRoomNumber}) berhasil tersimpan ke database.`
+      );
+    } catch (err: any) {
+      notify.alert({ title: "Gagal Membuat Tiket", message: err.message, variant: "danger" });
+    }
   };
 
   const getCategoryBadge = (cat: ComplaintCategory) => {

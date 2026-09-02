@@ -10,14 +10,36 @@ import {
   RoomComplaint,
   CashTransaction,
   FinanceWallet,
+  FinanceCategory,
+  OwnerDashboardMetrics,
+  UserProfile,
 } from "@/types";
+import { createClient } from "./supabase/client";
 
 const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000/api";
 
+async function getAuthHeader(): Promise<Record<string, string>> {
+  if (typeof window === "undefined") return {};
+  try {
+    const supabase = createClient();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      return { Authorization: `Bearer ${session.access_token}` };
+    }
+  } catch {
+    // Ignore error in server-side / SSR contexts
+  }
+  return {};
+}
+
 async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const authHeader = await getAuthHeader();
   const res = await fetch(`${API_BASE}${endpoint}`, {
     headers: {
       "Content-Type": "application/json",
+      ...authHeader,
       ...(options?.headers || {}),
     },
     ...options,
@@ -33,15 +55,37 @@ async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T>
 }
 
 export const KostApiClient = {
+  // Dashboard Metrics (Backend-calculated Single Source of Truth)
+  async getDashboardSummary(): Promise<OwnerDashboardMetrics> {
+    return fetchJson<OwnerDashboardMetrics>("/dashboard/summary");
+  },
+
   // Properties
   async getProperties(): Promise<Property[]> {
     return fetchJson<Property[]>("/properties");
+  },
+
+  async getPropertyById(id: string): Promise<Property> {
+    return fetchJson<Property>(`/properties/${id}`);
   },
 
   async createProperty(property: Partial<Property>): Promise<Property> {
     return fetchJson<Property>("/properties", {
       method: "POST",
       body: JSON.stringify(property),
+    });
+  },
+
+  async updateProperty(id: string, property: Partial<Property>): Promise<Property> {
+    return fetchJson<Property>(`/properties/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(property),
+    });
+  },
+
+  async deleteProperty(id: string): Promise<{ success: boolean }> {
+    return fetchJson<{ success: boolean }>(`/properties/${id}`, {
+      method: "DELETE",
     });
   },
 
@@ -117,6 +161,12 @@ export const KostApiClient = {
     });
   },
 
+  async deleteLease(id: string): Promise<{ success: boolean }> {
+    return fetchJson<{ success: boolean }>(`/leases/${id}`, {
+      method: "DELETE",
+    });
+  },
+
   // Invoices
   async getInvoices(propertyId?: string): Promise<Invoice[]> {
     const query = propertyId ? `?property_id=${propertyId}` : "";
@@ -137,6 +187,12 @@ export const KostApiClient = {
     });
   },
 
+  async deleteInvoice(id: string): Promise<{ success: boolean }> {
+    return fetchJson<{ success: boolean }>(`/invoices/${id}`, {
+      method: "DELETE",
+    });
+  },
+
   // Payments
   async recordPayment(payload: {
     invoice_id: string;
@@ -152,6 +208,32 @@ export const KostApiClient = {
     });
   },
 
+  // Payment Methods Config
+  async getPaymentMethods(propertyId?: string): Promise<PaymentMethodConfig[]> {
+    const query = propertyId ? `?property_id=${propertyId}` : "";
+    return fetchJson<PaymentMethodConfig[]>(`/payment-methods${query}`);
+  },
+
+  async createPaymentMethod(payload: Partial<PaymentMethodConfig>): Promise<PaymentMethodConfig> {
+    return fetchJson<PaymentMethodConfig>("/payment-methods", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updatePaymentMethod(id: string, payload: Partial<PaymentMethodConfig>): Promise<PaymentMethodConfig> {
+    return fetchJson<PaymentMethodConfig>(`/payment-methods/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deletePaymentMethod(id: string): Promise<{ success: boolean }> {
+    return fetchJson<{ success: boolean }>(`/payment-methods/${id}`, {
+      method: "DELETE",
+    });
+  },
+
   // Electricity
   async getElectricityTransactions(propertyId?: string): Promise<ElectricityTransaction[]> {
     const query = propertyId ? `?property_id=${propertyId}` : "";
@@ -161,6 +243,13 @@ export const KostApiClient = {
   async createElectricityTransaction(payload: Partial<ElectricityTransaction>): Promise<ElectricityTransaction> {
     return fetchJson<ElectricityTransaction>("/electricity", {
       method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateElectricityTransaction(id: string, payload: Partial<ElectricityTransaction>): Promise<ElectricityTransaction> {
+    return fetchJson<ElectricityTransaction>(`/electricity/${id}`, {
+      method: "PUT",
       body: JSON.stringify(payload),
     });
   },
@@ -185,7 +274,13 @@ export const KostApiClient = {
     });
   },
 
-  // Finance
+  async deleteComplaint(id: string): Promise<{ success: boolean }> {
+    return fetchJson<{ success: boolean }>(`/complaints/${id}`, {
+      method: "DELETE",
+    });
+  },
+
+  // Finance Wallets
   async getWallets(propertyId?: string): Promise<FinanceWallet[]> {
     const query = propertyId ? `?property_id=${propertyId}` : "";
     return fetchJson<FinanceWallet[]>(`/finance/wallets${query}`);
@@ -198,6 +293,45 @@ export const KostApiClient = {
     });
   },
 
+  async updateWallet(id: string, payload: Partial<FinanceWallet>): Promise<FinanceWallet> {
+    return fetchJson<FinanceWallet>(`/finance/wallets/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteWallet(id: string): Promise<{ success: boolean }> {
+    return fetchJson<{ success: boolean }>(`/finance/wallets/${id}`, {
+      method: "DELETE",
+    });
+  },
+
+  // Finance Categories
+  async getFinanceCategories(): Promise<FinanceCategory[]> {
+    return fetchJson<FinanceCategory[]>("/finance/categories");
+  },
+
+  async createFinanceCategory(payload: Partial<FinanceCategory>): Promise<FinanceCategory> {
+    return fetchJson<FinanceCategory>("/finance/categories", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateFinanceCategory(id: string, payload: Partial<FinanceCategory>): Promise<FinanceCategory> {
+    return fetchJson<FinanceCategory>(`/finance/categories/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteFinanceCategory(id: string): Promise<{ success: boolean }> {
+    return fetchJson<{ success: boolean }>(`/finance/categories/${id}`, {
+      method: "DELETE",
+    });
+  },
+
+  // Cash Transactions
   async getCashTransactions(propertyId?: string): Promise<CashTransaction[]> {
     const query = propertyId ? `?property_id=${propertyId}` : "";
     return fetchJson<CashTransaction[]>(`/finance/transactions${query}`);
@@ -206,6 +340,32 @@ export const KostApiClient = {
   async createCashTransaction(payload: Partial<CashTransaction>): Promise<CashTransaction> {
     return fetchJson<CashTransaction>("/finance/transactions", {
       method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateCashTransaction(id: string, payload: Partial<CashTransaction>): Promise<CashTransaction> {
+    return fetchJson<CashTransaction>(`/finance/transactions/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteCashTransaction(id: string): Promise<{ success: boolean }> {
+    return fetchJson<{ success: boolean }>(`/finance/transactions/${id}`, {
+      method: "DELETE",
+    });
+  },
+
+  // Staff Management
+  async getStaff(propertyId?: string): Promise<UserProfile[]> {
+    const query = propertyId ? `?property_id=${propertyId}` : "";
+    return fetchJson<UserProfile[]>(`/staff${query}`);
+  },
+
+  async updateStaff(id: string, payload: { role?: string; is_active?: boolean; full_name?: string; phone_number?: string }): Promise<UserProfile> {
+    return fetchJson<UserProfile>(`/staff/${id}`, {
+      method: "PUT",
       body: JSON.stringify(payload),
     });
   },

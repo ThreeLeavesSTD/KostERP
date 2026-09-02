@@ -30,8 +30,8 @@ import {
   HelpCircle,
   SlidersHorizontal,
 } from "lucide-react";
-import { OwnerDashboardMetrics, Room, Lease, Invoice, Tenant, CashTransaction } from "@/types";
-import { KostStorage } from "@/lib/storage";
+import { OwnerDashboardMetrics, Room, Lease, Invoice, Tenant, CashTransaction, ElectricityTransaction } from "@/types";
+import { KostApiClient } from "@/lib/api-client";
 import { formatRupiah, formatDateIndo } from "@/lib/utils";
 import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
@@ -65,28 +65,52 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [cashTransactions, setCashTransactions] = useState<CashTransaction[]>([]);
+  const [electricityTransactions, setElectricityTransactions] = useState<ElectricityTransaction[]>([]);
   const [promptInput, setPromptInput] = useState("");
   const [isPromptSending, setIsPromptSending] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Timeframe selector for charts
   const [cashflowTimeframe, setCashflowTimeframe] = useState<"6m" | "1y" | "30d">("6m");
   const [tenantMetricView, setTenantMetricView] = useState<"occupancy" | "types">("occupancy");
 
-  const loadData = () => {
-    setMetrics(KostStorage.getOwnerMetrics());
-    setRooms(KostStorage.getRooms());
-    setLeases(KostStorage.getLeases());
-    setInvoices(KostStorage.getInvoices());
-    setTenants(KostStorage.getTenants());
-    setCashTransactions(KostStorage.getCashTransactions());
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const [m, r, l, inv, t, cash, elec] = await Promise.all([
+        KostApiClient.getDashboardSummary(),
+        KostApiClient.getRooms(),
+        KostApiClient.getLeases(),
+        KostApiClient.getInvoices(),
+        KostApiClient.getTenants(),
+        KostApiClient.getCashTransactions(),
+        KostApiClient.getElectricityTransactions(),
+      ]);
+      setMetrics(m);
+      setRooms(r);
+      setLeases(l);
+      setInvoices(inv);
+      setTenants(t);
+      setCashTransactions(cash);
+      setElectricityTransactions(elec);
+    } catch (err) {
+      console.error("Gagal memuat data dashboard:", err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
     loadData();
-    const handleStorageChange = () => loadData();
-    window.addEventListener("kost_storage_change", handleStorageChange);
-    return () => window.removeEventListener("kost_storage_change", handleStorageChange);
   }, []);
+
+  if (isLoading && !metrics) {
+    return (
+      <div className="flex h-64 w-full items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#0A0A0A] border-t-transparent dark:border-white" />
+      </div>
+    );
+  }
 
   if (!metrics) return null;
 
@@ -286,7 +310,7 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
     XLSX.utils.book_append_sheet(wb, wsInvoices, "Laporan Invoice");
 
     // Sheet 2: Token Listrik
-    const electricity = KostStorage.getElectricityTransactions();
+    const electricity = electricityTransactions;
     const tokenRows = electricity.map((e) => ({
       "Tanggal Input": e.created_at,
       "Nomor Kamar": e.room_number,

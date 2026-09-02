@@ -1,5 +1,5 @@
 export type RoomStatus = 'available' | 'occupied' | 'maintenance';
-export type LeaseStatus = 'active' | 'completed' | 'cancelled';
+export type LeaseStatus = 'active' | 'completed' | 'cancelled' | 'terminated';
 export type InvoiceStatus = 'unpaid' | 'paid' | 'overdue';
 export type TokenPaymentStatus = 'paid_cash' | 'paid_transfer' | 'invoiced' | 'unpaid';
 export type UserRole = 'owner' | 'admin' | 'cleaning_staff' | string;
@@ -192,12 +192,16 @@ export interface StaffAccount {
 export interface UserProfile {
   id: string;
   full_name: string;
-  username: string;
-  email: string;
-  phone_number: string;
+  username?: string;
+  email?: string;
+  phone_number?: string;
   role: UserRole;
   avatar_url?: string;
-  property_name: string;
+  property_name?: string;
+  property_id?: string | null;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export type FeaturePermission =
@@ -224,7 +228,7 @@ export interface RolePermissionConfig {
 }
 
 export type ComplaintStatus = "pending" | "in_progress" | "resolved";
-export type ComplaintCategory = "ac_facility" | "plumbing" | "electricity" | "cleanliness" | "security" | "general";
+export type ComplaintCategory = "ac_facility" | "plumbing" | "electricity" | "cleanliness" | "security" | "general" | "other";
 export type ComplaintPriority = "low" | "medium" | "high" | "urgent";
 
 export interface RoomComplaint {
