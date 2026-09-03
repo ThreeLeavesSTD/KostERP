@@ -21,3 +21,5 @@ export const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey || anonKey
 
 // Alias default untuk kompatibilitas data access
 export const supabase = supabaseAdmin;
+
+export const STAFF_EMAIL_DOMAIN = process.env.STAFF_EMAIL_DOMAIN || "staff.kost.noud.id";

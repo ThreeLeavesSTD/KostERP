@@ -16,6 +16,7 @@ import authRoutes from "./routes/auth.routes";
 import dashboardRoutes from "./routes/dashboard.routes";
 import paymentMethodsRoutes from "./routes/payment-methods.routes";
 import staffRoutes from "./routes/staff.routes";
+import rolesRoutes from "./routes/roles.routes";
 import { requireAuth } from "./middleware/auth";
 
 dotenv.config();
@@ -73,6 +74,7 @@ app.use("/api/electricity", requireAuth, electricityRoutes);
 app.use("/api/complaints", requireAuth, complaintsRoutes);
 app.use("/api/finance", requireAuth, financeRoutes);
 app.use("/api/staff", requireAuth, staffRoutes);
+app.use("/api/roles", requireAuth, rolesRoutes);
 
 // Global Error Handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {

@@ -709,8 +709,152 @@ export const SupabaseService = {
   },
 
   // Staff / User Profiles
+  async generateNextLoginId(): Promise<string> {
+    try {
+      const { data, error } = await supabase.rpc("get_next_staff_login_id");
+      if (!error && data) {
+        return String(data);
+      }
+    } catch {
+      // fallback jika rpc error
+    }
+
+    try {
+      const { data } = await supabase
+        .from("user_profiles")
+        .select("login_id")
+        .not("login_id", "is", null);
+
+      if (data && data.length > 0) {
+        const numericIds = data
+          .map((row: any) => Number(row.login_id))
+          .filter((n: number) => !isNaN(n));
+        if (numericIds.length > 0) {
+          return String(Math.max(...numericIds) + 1);
+        }
+      }
+    } catch {}
+
+    return "1300000";
+  },
+
+  // Roles & Permissions Management
+  async getRoles(propertyId?: string) {
+    let query = supabase
+      .from("custom_roles")
+      .select("*")
+      .order("is_system", { ascending: false })
+      .order("created_at", { ascending: true });
+
+    if (propertyId && isValidUUID(propertyId)) {
+      query = query.or(`property_id.eq.${propertyId},is_system.eq.true`);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+  },
+
+  async getRoleById(id: string) {
+    const { data, error } = await supabase
+      .from("custom_roles")
+      .select("*")
+      .eq("id", id)
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async createRole(payload: {
+    id?: string;
+    property_id?: string;
+    name: string;
+    description?: string;
+    badge_color?: string;
+    permissions: string[];
+  }) {
+    const propId =
+      payload.property_id && isValidUUID(payload.property_id)
+        ? payload.property_id
+        : await this.getDefaultPropertyId();
+
+    const roleId = payload.id || `role_${Date.now()}`;
+    const insertData = {
+      id: roleId,
+      property_id: propId,
+      name: payload.name.trim(),
+      description: payload.description || "",
+      badge_color: payload.badge_color || "info",
+      is_system: false,
+      permissions: payload.permissions || [],
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from("custom_roles")
+      .insert(insertData)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async updateRole(
+    id: string,
+    payload: {
+      name?: string;
+      description?: string;
+      badge_color?: string;
+      permissions?: string[];
+    }
+  ) {
+    const updateData: any = {
+      updated_at: new Date().toISOString(),
+    };
+    if (payload.name !== undefined) updateData.name = payload.name.trim();
+    if (payload.description !== undefined) updateData.description = payload.description;
+    if (payload.badge_color !== undefined) updateData.badge_color = payload.badge_color;
+    if (payload.permissions !== undefined) updateData.permissions = payload.permissions;
+
+    const { data, error } = await supabase
+      .from("custom_roles")
+      .update(updateData)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteRole(id: string) {
+    const existing = await this.getRoleById(id);
+    if (existing?.is_system) {
+      throw new Error("Role sistem bawaan (Owner, Admin, Cleaning Staff) tidak dapat dihapus.");
+    }
+
+    const { data: assignedUsers, error: userError } = await supabase
+      .from("user_profiles")
+      .select("id, full_name")
+      .eq("custom_role_id", id);
+
+    if (!userError && assignedUsers && assignedUsers.length > 0) {
+      throw new Error(
+        `Role "${existing.name}" masih digunakan oleh ${assignedUsers.length} karyawan. Pindahkan role karyawan terlebih dahulu.`
+      );
+    }
+
+    const { error } = await supabase.from("custom_roles").delete().eq("id", id);
+    if (error) throw error;
+    return { success: true };
+  },
+
   async getStaff(propertyId?: string) {
-    let query = supabase.from("user_profiles").select("*").order("created_at", { ascending: true });
+    let query = supabase
+      .from("user_profiles")
+      .select("id, property_id, full_name, role, custom_role_id, phone_number, is_active, login_id, email, created_at, updated_at")
+      .order("created_at", { ascending: true });
     if (propertyId && isValidUUID(propertyId)) {
       query = query.eq("property_id", propertyId);
     }
@@ -719,7 +863,18 @@ export const SupabaseService = {
     return data || [];
   },
 
-  async updateStaff(id: string, payload: { role?: string; is_active?: boolean; full_name?: string; phone_number?: string }) {
+  async updateStaff(
+    id: string,
+    payload: {
+      role?: string;
+      custom_role_id?: string;
+      is_active?: boolean;
+      full_name?: string;
+      phone_number?: string;
+      email?: string;
+      login_id?: string;
+    }
+  ) {
     const { data, error } = await supabase
       .from("user_profiles")
       .update(payload)

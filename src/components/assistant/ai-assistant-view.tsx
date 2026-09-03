@@ -25,6 +25,9 @@ import {
   RefreshCw,
   ExternalLink,
   Wifi,
+  WifiOff,
+  AlertCircle,
+  AlertTriangle,
 } from "lucide-react";
 import { KostApiClient } from "@/lib/api-client";
 import { formatRupiah, formatDateIndo, formatTokenPLN } from "@/lib/utils";
@@ -43,7 +46,7 @@ interface Message {
   sender: "user" | "assistant";
   text: string;
   timestamp: string;
-  source?: "n8n_webhook" | "local_concierge";
+  source?: "n8n_webhook" | "local_concierge" | "connection_error";
   actionType?: "rooms" | "invoices" | "electricity" | "revenue" | "cashflow" | "general";
   actionData?: any;
 }
@@ -403,34 +406,37 @@ export function AIAssistantView({
         return;
       }
 
-      // 3. Fallback to local concierge intelligence if n8n webhook test is standby/inactive
-      const fallback = await generateAIResponse(userText);
-      let fallbackText = fallback.text;
+      // 3. Jika n8n gagal / tidak tersambung: JANGAN PAKAI BALASAN SEMENTARA, TAMPILKAN KONEKSI TERPUTUS
+      setConnectionStatus("disconnected");
 
+      let disconnectText = "";
       if (n8nRes.isTestInactive) {
-        setConnectionStatus("standby");
-        fallbackText = `📡 **Status Koneksi n8n AI (kostChatbotz):**\nWebhook n8n dalam *Mode Uji Coba (webhook-test)* sedang standby menunggu trigger di kanvas n8n.\n\n👉 **Langkah Menghubungkan:** Buka alur n8n Anda di browser, klik tombol **'Execute workflow'** di kanvas, lalu kirim pesan lagi di sini agar dijawab langsung oleh AI Agent n8n Anda!\n\n---\n*(Balasan sementara dari Concierge ERP internal):*\n\n${fallback.text}`;
+        disconnectText = `🔴 **Koneksi Terputus: Webhook n8n Belum Aktif (404)**\n\nAlur kerja n8n pada endpoint \`${webhookUrl}\` saat ini tidak aktif atau belum siap menerima trigger.\n\n👉 **Langkah Penanganan:**\n1. Buka kanvas n8n Anda (*kostChatbotz*).\n2. Klik tombol **'Execute workflow'** di kanvas n8n jika menggunakan Mode Test, atau aktifkan toggle **Active = ON** di pojok kanan atas.\n3. Kirim kembali pesan Anda untuk memproses melalui AI Agent n8n.`;
       } else if (n8nRes.isNoItemFound) {
-        setConnectionStatus("warning");
-        fallbackText = `⚠️ **Status Koneksi n8n AI (kostChatbotz):**\nPesan berhasil terkirim ke webhook n8n, namun alur n8n mengembalikan pesan *'No item to return was found'*.\n\n👉 **Solusi:** Di editor n8n, pastikan node **AI Agent** atau LLM Anda menghasilkan balasan dan terhubung ke node **'Respond to Webhook'**.\n\n---\n*(Balasan sementara dari Concierge ERP internal):*\n\n${fallback.text}`;
+        disconnectText = `🔴 **Koneksi Terputus: Tidak Ada Respon Dari Alur n8n**\n\nPesan terkirim ke webhook n8n, namun alur kerja n8n selesai tanpa mengembalikan data balasan (*No item to return was found*).\n\n👉 **Langkah Penanganan:**\nPastikan node **AI Agent** (*Beebee Agent*) atau LLM Anda terhubung ke node **'Respond to Webhook'** di kanvas n8n.`;
+      } else if (n8nRes.error || n8nRes.status) {
+        const errorDetail = n8nRes.error || n8nRes.hint || "Terjadi error pada alur kerja n8n.";
+        disconnectText = `🔴 **Koneksi Terputus: Terjadi Error pada Alur n8n (${n8nRes.status || 500})**\n\nWebhook n8n menerima request, namun terjadi error saat dieksekusi oleh AI Agent (*Beebee Agent*).\n\n⚠️ **Rincian Error n8n:**\n\`\`\`\n${errorDetail.slice(0, 300)}\n\`\`\`\n👉 **Langkah Penanganan:**\n1. Buka alur kerja n8n Anda di browser.\n2. Buka tab **Executions** untuk melihat node yang mengalami error (bertanda silang merah ❌).\n3. Pastikan konfigurasi Model AI (Gemini), Chat Memory, dan Tool terhubung dengan benar.`;
+      } else {
+        disconnectText = `🔴 **Koneksi Terputus ke AI Agent n8n**\n\nTidak dapat terhubung ke webhook n8n: \`${webhookUrl}\`.\n\n👉 Pastikan server n8n Anda aktif dan dapat diakses dari jaringan ini.`;
       }
 
       const aiMsg: Message = {
         id: `ai-${Date.now()}`,
         sender: "assistant",
-        text: fallbackText,
-        source: "local_concierge",
-        actionType: fallback.actionType,
-        actionData: fallback.actionData,
+        text: disconnectText,
+        source: "connection_error",
         timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
       };
       setMessages((prev) => [...prev, aiMsg]);
-    } catch {
+    } catch (err: unknown) {
+      setConnectionStatus("disconnected");
+      const errMsg = err instanceof Error ? err.message : "Network error";
       const aiMsg: Message = {
         id: `ai-${Date.now()}`,
         sender: "assistant",
-        text: "Maaf, terjadi kendala saat menghubungkan ke database server atau webhook.",
-        source: "local_concierge",
+        text: `🔴 **Koneksi Terputus: Gagal Menghubungi Host n8n**\n\nTerjadi kegagalan jaringan saat menghubungi \`${webhookUrl}\`:\n*${errMsg}*.\n\n👉 Periksa koneksi internet Anda atau pastikan domain/server n8n sedang berjalan.`,
+        source: "connection_error",
         timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
       };
       setMessages((prev) => [...prev, aiMsg]);
@@ -542,6 +548,8 @@ export function AIAssistantView({
                     ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
                     : connectionStatus === "standby"
                     ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                    : connectionStatus === "disconnected"
+                    ? "bg-rose-500/15 text-rose-400 border-rose-500/30"
                     : "bg-neutral-800 text-neutral-400 border-neutral-700"
                 }`}
               >
@@ -551,6 +559,8 @@ export function AIAssistantView({
                       ? "bg-emerald-400 animate-pulse"
                       : connectionStatus === "standby"
                       ? "bg-amber-400 animate-pulse"
+                      : connectionStatus === "disconnected"
+                      ? "bg-rose-500 animate-pulse"
                       : "bg-neutral-500"
                   }`}
                 />
@@ -558,6 +568,8 @@ export function AIAssistantView({
                   ? "AI Connected"
                   : connectionStatus === "standby"
                   ? "Standby"
+                  : connectionStatus === "disconnected"
+                  ? "Koneksi Terputus"
                   : "Siap Terhubung"}
               </span>
             </div>
@@ -702,15 +714,27 @@ export function AIAssistantView({
                   }`}
                 >
                   {isAssistant && (
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#0A0A0A] text-[#D9FF43] shadow-xs dark:bg-white dark:text-[#0A0A0A] mt-1">
-                      <Bot className="h-4 w-4" />
+                    <div
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl shadow-xs mt-1 ${
+                        msg.source === "connection_error"
+                          ? "bg-rose-500 text-white shadow-rose-500/20"
+                          : "bg-[#0A0A0A] text-[#D9FF43] dark:bg-white dark:text-[#0A0A0A]"
+                      }`}
+                    >
+                      {msg.source === "connection_error" ? (
+                        <WifiOff className="h-4 w-4" />
+                      ) : (
+                        <Bot className="h-4 w-4" />
+                      )}
                     </div>
                   )}
 
                   <div
                     className={`max-w-[85%] rounded-3xl p-4 sm:p-5 text-xs shadow-xs ${
                       isAssistant
-                        ? "bg-neutral-50 text-neutral-900 border border-neutral-100 rounded-tl-sm dark:bg-neutral-800/80 dark:text-white dark:border-white/5"
+                        ? msg.source === "connection_error"
+                          ? "bg-rose-50/80 text-rose-950 border border-rose-200/90 rounded-tl-sm dark:bg-rose-950/25 dark:text-rose-100 dark:border-rose-900/50"
+                          : "bg-neutral-50 text-neutral-900 border border-neutral-100 rounded-tl-sm dark:bg-neutral-800/80 dark:text-white dark:border-white/5"
                         : "bg-[#0A0A0A] text-white rounded-tr-sm dark:bg-white dark:text-[#0A0A0A]"
                     }`}
                   >
@@ -723,8 +747,13 @@ export function AIAssistantView({
                       <div className="flex items-center gap-1.5">
                         <span>{isAssistant ? "Kost Concierge AI" : "Anda"}</span>
                         {isAssistant && msg.source === "n8n_webhook" && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#D9FF43] px-1.5 py-0.5 text-[9px] font-black text-[#0A0A0A]">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[#D9FF43] px-2 py-0.5 text-[9px] font-black text-[#0A0A0A]">
                             <Sparkles className="h-2.5 w-2.5" /> n8n Live
+                          </span>
+                        )}
+                        {isAssistant && msg.source === "connection_error" && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-rose-500 text-white px-2 py-0.5 text-[9px] font-black shadow-xs">
+                            <WifiOff className="h-2.5 w-2.5" /> Koneksi Terputus
                           </span>
                         )}
                         {isAssistant && msg.source === "local_concierge" && (

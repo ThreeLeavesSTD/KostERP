@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { UserRole } from "@/types";
 import { hasPermission } from "@/lib/permissions";
+import { useAuth } from "@/lib/auth-context";
 
 interface SidebarProps {
   currentRole: UserRole;
@@ -26,6 +27,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ currentRole, activeTab, onTabChange }: SidebarProps) {
+  const { profile } = useAuth();
   const allNavItems = [
     {
       id: "owner-dashboard",
@@ -87,7 +89,7 @@ export function Sidebar({ currentRole, activeTab, onTabChange }: SidebarProps) {
   ];
 
   const visibleItems = allNavItems.filter((item) =>
-    hasPermission(currentRole, item.id)
+    hasPermission(currentRole, item.id, profile?.permissions)
   );
 
   return (

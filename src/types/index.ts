@@ -178,10 +178,12 @@ export interface StaffAccount {
   property_id: string;
   full_name: string;
   username: string;
-  password: string;
-  role: UserRole;
+  password?: string;
+  role: UserRole | string;
+  custom_role_id?: string | null;
   phone_number: string;
   email?: string;
+  login_id?: string | null;
   shift?: string;
   notes?: string;
   is_active: boolean;
@@ -195,7 +197,11 @@ export interface UserProfile {
   username?: string;
   email?: string;
   phone_number?: string;
+  login_id?: string | null;
   role: UserRole;
+  custom_role_id?: string | null;
+  role_name?: string;
+  permissions?: string[];
   avatar_url?: string;
   property_name?: string;
   property_id?: string | null;
@@ -219,12 +225,14 @@ export type FeaturePermission =
 
 export interface RolePermissionConfig {
   id: string;
+  property_id?: string;
   name: string;
   description: string;
-  badge_color?: "lime" | "info" | "warning" | "destructive" | "success" | "secondary";
+  badge_color?: "lime" | "info" | "warning" | "destructive" | "success" | "secondary" | string;
   is_system?: boolean;
   permissions: string[];
   created_at?: string;
+  updated_at?: string;
 }
 
 export type ComplaintStatus = "pending" | "in_progress" | "resolved";

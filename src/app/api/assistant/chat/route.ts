@@ -136,7 +136,17 @@ export async function POST(req: Request) {
     if (!n8nRes.ok) {
       const errText = await n8nRes.text();
       let isNoItemFound = false;
-      let hint = `Webhook n8n mengembalikan status ${n8nRes.status}: ${errText.slice(0, 200)}`;
+      let detailedError = errText;
+      try {
+        const parsed = JSON.parse(errText);
+        if (parsed.message) detailedError = parsed.message;
+        else if (parsed.errorMessage) detailedError = parsed.errorMessage;
+        else if (parsed.error) detailedError = typeof parsed.error === "string" ? parsed.error : JSON.stringify(parsed.error);
+      } catch {
+        // Raw text
+      }
+
+      let hint = `Webhook n8n mengembalikan status ${n8nRes.status}: ${detailedError.slice(0, 300)}`;
 
       if (errText.includes("No item to return was found")) {
         isNoItemFound = true;
@@ -150,7 +160,7 @@ export async function POST(req: Request) {
           status: n8nRes.status,
           isNoItemFound,
           hint,
-          error: hint,
+          error: detailedError || hint,
           targetUrl,
           rawError: errText,
         },

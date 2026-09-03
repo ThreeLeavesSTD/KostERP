@@ -15,7 +15,7 @@ router.get("/me", requireAuth, async (req: Request, res: Response) => {
 
     const { data: profile, error } = await supabaseAdmin
       .from("user_profiles")
-      .select("id, full_name, role, property_id, phone_number, is_active")
+      .select("id, full_name, role, custom_role_id, property_id, phone_number, is_active, login_id, email")
       .eq("id", auth.userId)
       .single();
 
@@ -26,14 +26,35 @@ router.get("/me", requireAuth, async (req: Request, res: Response) => {
       });
     }
 
+    const roleKey = profile.custom_role_id || profile.role;
+    let permissions: string[] = [];
+    let roleDetails: any = null;
+
+    if (roleKey) {
+      const { data: roleData } = await supabaseAdmin
+        .from("custom_roles")
+        .select("*")
+        .eq("id", roleKey)
+        .maybeSingle();
+
+      if (roleData) {
+        permissions = roleData.permissions || [];
+        roleDetails = roleData;
+      }
+    }
+
     res.json({
       success: true,
       data: {
         id: profile.id,
         full_name: profile.full_name,
         role: profile.role,
+        custom_role_id: profile.custom_role_id || profile.role,
+        permissions,
+        role_name: roleDetails?.name || profile.role,
         property_id: profile.property_id,
-        email: user.email || null,
+        login_id: profile.login_id || null,
+        email: profile.email || user.email || null,
         phone_number: profile.phone_number || user.phone || null,
       },
     });

@@ -19,14 +19,14 @@ ON CONFLICT (id) DO UPDATE SET
     phone = EXCLUDED.phone;
 
 -- 2. Rooms
-INSERT INTO public.rooms (property_id, room_number, floor, room_type, base_price, facilities, status, notes)
+INSERT INTO public.rooms (id, property_id, room_number, floor, room_type, base_price, facilities, status, notes)
 VALUES
-    ('a0000000-0000-0000-0000-000000000001', '101', 1, 'Deluxe AC', 1800000, ARRAY['Kasur Queen', 'AC', 'Kamar Mandi Dalam', 'Lemari', 'Meja Kerja'], 'occupied', 'Depan taman'),
-    ('a0000000-0000-0000-0000-000000000001', '102', 1, 'Standard AC', 1500000, ARRAY['Kasur Single', 'AC', 'Kamar Mandi Luar', 'Lemari'], 'occupied', 'Dekat pantry'),
-    ('a0000000-0000-0000-0000-000000000001', '103', 1, 'Standard Non-AC', 1200000, ARRAY['Kasur Single', 'Kipas Angin', 'Kamar Mandi Luar'], 'available', 'Jendela samping'),
-    ('a0000000-0000-0000-0000-000000000001', '201', 2, 'VIP Balcony', 2200000, ARRAY['Kasur King', 'AC', 'Kamar Mandi Dalam (Water Heater)', 'Balkon Pribadi', 'Smart TV'], 'occupied', 'Pemandangan kota'),
-    ('a0000000-0000-0000-0000-000000000001', '202', 2, 'Deluxe AC', 1800000, ARRAY['Kasur Queen', 'AC', 'Kamar Mandi Dalam', 'Lemari'], 'available', 'Lantai 2 timur'),
-    ('a0000000-0000-0000-0000-000000000001', '203', 2, 'Standard AC', 1500000, ARRAY['Kasur Single', 'AC', 'Kamar Mandi Luar'], 'maintenance', 'Perbaikan cat dinding')
+    ('b0000000-0000-0000-0000-000000000101', 'a0000000-0000-0000-0000-000000000001', '101', 1, 'Deluxe AC', 1800000, ARRAY['Kasur Queen', 'AC', 'Kamar Mandi Dalam', 'Lemari', 'Meja Kerja'], 'occupied', 'Depan taman'),
+    ('b0000000-0000-0000-0000-000000000102', 'a0000000-0000-0000-0000-000000000001', '102', 1, 'Standard AC', 1500000, ARRAY['Kasur Single', 'AC', 'Kamar Mandi Luar', 'Lemari'], 'occupied', 'Dekat pantry'),
+    ('b0000000-0000-0000-0000-000000000103', 'a0000000-0000-0000-0000-000000000001', '103', 1, 'Standard Non-AC', 1200000, ARRAY['Kasur Single', 'Kipas Angin', 'Kamar Mandi Luar'], 'available', 'Jendela samping'),
+    ('b0000000-0000-0000-0000-000000000201', 'a0000000-0000-0000-0000-000000000001', '201', 2, 'VIP Balcony', 2200000, ARRAY['Kasur King', 'AC', 'Kamar Mandi Dalam (Water Heater)', 'Balkon Pribadi', 'Smart TV'], 'occupied', 'Pemandangan kota'),
+    ('b0000000-0000-0000-0000-000000000202', 'a0000000-0000-0000-0000-000000000001', '202', 2, 'Deluxe AC', 1800000, ARRAY['Kasur Queen', 'AC', 'Kamar Mandi Dalam', 'Lemari'], 'available', 'Lantai 2 timur'),
+    ('b0000000-0000-0000-0000-000000000203', 'a0000000-0000-0000-0000-000000000001', '203', 2, 'Standard AC', 1500000, ARRAY['Kasur Single', 'AC', 'Kamar Mandi Luar'], 'maintenance', 'Perbaikan cat dinding')
 ON CONFLICT (property_id, room_number) DO UPDATE SET
     floor = EXCLUDED.floor,
     room_type = EXCLUDED.room_type,

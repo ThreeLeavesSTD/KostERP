@@ -16,11 +16,16 @@ export const ALL_PERMISSIONS = [
 
 /**
  * Mendapatkan daftar hak akses tab/modul berdasarkan role user
- * - owner: semua tab
- * - admin: semua kecuali owner-audit, staff-management, billing-settings
- * - cleaning_staff: rooms + profile saja
+ * Jika customPermissions disediakan dari database profil, gunakan customPermissions tersebut.
  */
-export function getPermissionsForRole(role: UserRole | string): string[] {
+export function getPermissionsForRole(
+  role: UserRole | string,
+  customPermissions?: string[]
+): string[] {
+  if (customPermissions && Array.isArray(customPermissions) && customPermissions.length > 0) {
+    return customPermissions;
+  }
+
   switch (role) {
     case "owner":
       return [...ALL_PERMISSIONS];
@@ -38,6 +43,10 @@ export function getPermissionsForRole(role: UserRole | string): string[] {
 /**
  * Memeriksa apakah role memiliki hak akses ke permission/tab tertentu
  */
-export function hasPermission(role: UserRole | string, permission: string): boolean {
-  return getPermissionsForRole(role).includes(permission);
+export function hasPermission(
+  role: UserRole | string,
+  permission: string,
+  customPermissions?: string[]
+): boolean {
+  return getPermissionsForRole(role, customPermissions).includes(permission);
 }

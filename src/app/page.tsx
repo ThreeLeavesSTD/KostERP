@@ -51,16 +51,16 @@ export default function HomePage() {
   // Update tab default berdasarkan role user yang aktif
   useEffect(() => {
     if (isAuthenticated) {
-      if (hasPermission(currentRole, "owner-dashboard")) {
+      if (hasPermission(currentRole, "owner-dashboard", profile?.permissions)) {
         setActiveTab("owner-dashboard");
-      } else if (hasPermission(currentRole, "rooms")) {
+      } else if (hasPermission(currentRole, "rooms", profile?.permissions)) {
         setActiveTab("rooms");
       } else {
-        const perms = getPermissionsForRole(currentRole);
+        const perms = getPermissionsForRole(currentRole, profile?.permissions);
         setActiveTab(perms[0] || "profile");
       }
     }
-  }, [isAuthenticated, currentRole]);
+  }, [isAuthenticated, currentRole, profile?.permissions]);
 
   const handleNavigateTab = (tab: string, prompt?: string) => {
     if (prompt) {

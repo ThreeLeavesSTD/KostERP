@@ -4,10 +4,12 @@ import React, { useState } from "react";
 import { Building2, Lock, Mail, User, ArrowRight, Loader2, Sparkles } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
+const STAFF_EMAIL_DOMAIN = process.env.NEXT_PUBLIC_STAFF_EMAIL_DOMAIN || "staff.kost.noud.id";
+
 export function LoginForm() {
   const { signIn, signUp } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -29,7 +31,7 @@ export function LoginForm() {
           return;
         }
 
-        const result = await signUp(email, password, fullName, phone);
+        const result = await signUp(identifier.trim(), password, fullName, phone);
         if (result.error) {
           setError(result.error);
         } else if (result.message) {
@@ -37,11 +39,15 @@ export function LoginForm() {
           // Jika signup sukses dan sudah otomatis login, AuthContext akan otomatis update
         }
       } else {
-        const result = await signIn(email, password);
+        const trimmed = identifier.trim();
+        // Auto-detect: jika ada '@' maka email asli (Owner), jika angka/ID maka map ke email sintetik Staff
+        const loginEmail = trimmed.includes("@") ? trimmed : `${trimmed}@${STAFF_EMAIL_DOMAIN}`;
+
+        const result = await signIn(loginEmail, password);
         if (result.error) {
           setError(
             result.error === "Invalid login credentials"
-              ? "Email atau password salah. Silakan periksa kembali."
+              ? "Email/ID atau password salah. Silakan periksa kembali."
               : result.error
           );
         }
@@ -108,14 +114,19 @@ export function LoginForm() {
           </button>
         </div>
 
-        {/* Info Alert untuk user pertama */}
+        {/* Info Alert untuk user pertama / mode Sign Up */}
         {isSignUp && (
           <div className="mb-4 flex items-start gap-2.5 rounded-2xl bg-amber-50/80 border border-amber-200/80 p-3 text-xs text-amber-900 dark:bg-amber-950/40 dark:border-amber-900/50 dark:text-amber-200">
             <Sparkles className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
-            <p className="leading-relaxed">
-              <strong>Pendaftar Pertama:</strong> Akun pertama yang didaftarkan di sistem ini akan
-              otomatis diset menjadi <strong>Owner</strong> utama properti.
-            </p>
+            <div className="leading-relaxed space-y-1">
+              <p>
+                <strong>Pendaftaran Owner:</strong> Akun pertama yang didaftarkan di sistem ini akan
+                otomatis diset sebagai <strong>Super Owner</strong>.
+              </p>
+              <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                *Akun Staf (Admin & Kebersihan) dibuat langsung oleh Owner melalui menu Manajemen Staf.
+              </p>
+            </div>
           </div>
         )}
 
@@ -178,20 +189,24 @@ export function LoginForm() {
 
           <div>
             <label className="mb-1 block text-xs font-bold text-neutral-700 dark:text-neutral-300">
-              Alamat Email
+              {isSignUp ? "Alamat Email Owner" : "Email (Owner) atau ID (Staff)"}
             </label>
             <div className="relative">
               <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
-                <Mail className="h-4 w-4 text-neutral-400" />
+                {identifier.includes("@") || isSignUp ? (
+                  <Mail className="h-4 w-4 text-neutral-400" />
+                ) : (
+                  <User className="h-4 w-4 text-neutral-400" />
+                )}
               </div>
               <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type={isSignUp ? "email" : "text"}
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
                 className="block w-full rounded-2xl border border-neutral-200/80 bg-neutral-50 py-2.5 pl-11 pr-4 text-sm font-medium focus:ring-2 focus:ring-[#0A0A0A] focus:outline-none dark:border-neutral-700 dark:bg-neutral-800 dark:text-white"
-                placeholder="nama@email.com"
+                placeholder={isSignUp ? "owner@email.com" : "nama@email.com atau ID Staff (1300000)"}
                 required
-                autoComplete="email"
+                autoComplete={isSignUp ? "email" : "username"}
               />
             </div>
           </div>
@@ -211,7 +226,6 @@ export function LoginForm() {
                 className="block w-full rounded-2xl border border-neutral-200/80 bg-neutral-50 py-2.5 pl-11 pr-4 text-sm font-medium focus:ring-2 focus:ring-[#0A0A0A] focus:outline-none dark:border-neutral-700 dark:bg-neutral-800 dark:text-white"
                 placeholder="••••••••"
                 required
-                minLength={6}
                 autoComplete={isSignUp ? "new-password" : "current-password"}
               />
             </div>

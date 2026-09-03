@@ -766,6 +766,19 @@ export const KostStorage = {
     }
   },
 
+  updateElectricityTransaction: (
+    id: string,
+    updates: Partial<ElectricityTransaction>
+  ): ElectricityTransaction | null => {
+    const list = KostStorage.getElectricityTransactions();
+    const index = list.findIndex((t) => t.id === id);
+    if (index === -1) return null;
+    const updated = { ...list[index], ...updates };
+    list[index] = updated;
+    setItem(STORAGE_KEYS.ELECTRICITY, [...list]);
+    return updated;
+  },
+
   // PAYMENT METHODS CONFIG
   getPaymentMethods: (): PaymentMethodConfig[] =>
     getItem(STORAGE_KEYS.PAYMENT_METHODS, initialPaymentMethods),
@@ -1267,6 +1280,19 @@ export const KostStorage = {
     };
     setItem(STORAGE_KEYS.FINANCE_CATEGORIES, [newCat, ...list]);
     return newCat;
+  },
+
+  updateFinanceCategory: (
+    id: string,
+    updates: Partial<FinanceCategory>
+  ): FinanceCategory | null => {
+    const list = KostStorage.getFinanceCategories();
+    const index = list.findIndex((c) => c.id === id);
+    if (index === -1) return null;
+    const updated = { ...list[index], ...updates };
+    list[index] = updated;
+    setItem(STORAGE_KEYS.FINANCE_CATEGORIES, [...list]);
+    return updated;
   },
 
   deleteFinanceCategory: (id: string): boolean => {

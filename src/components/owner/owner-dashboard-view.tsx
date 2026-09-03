@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { OwnerDashboardMetrics, Room, Lease, Invoice, Tenant, CashTransaction, ElectricityTransaction } from "@/types";
 import { KostApiClient } from "@/lib/api-client";
+import { KostStorage } from "@/lib/storage";
 import { formatRupiah, formatDateIndo } from "@/lib/utils";
 import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
@@ -59,60 +60,71 @@ interface OwnerDashboardViewProps {
 }
 
 export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
-  const [metrics, setMetrics] = useState<OwnerDashboardMetrics | null>(null);
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [leases, setLeases] = useState<Lease[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [cashTransactions, setCashTransactions] = useState<CashTransaction[]>([]);
-  const [electricityTransactions, setElectricityTransactions] = useState<ElectricityTransaction[]>([]);
+  // Initialize with local KostStorage immediately to guarantee instant render without blank screen
+  const [metrics, setMetrics] = useState<OwnerDashboardMetrics>(() => KostStorage.getOwnerMetrics());
+  const [rooms, setRooms] = useState<Room[]>(() => KostStorage.getRooms());
+  const [leases, setLeases] = useState<Lease[]>(() => KostStorage.getLeases());
+  const [invoices, setInvoices] = useState<Invoice[]>(() => KostStorage.getInvoices());
+  const [tenants, setTenants] = useState<Tenant[]>(() => KostStorage.getTenants());
+  const [cashTransactions, setCashTransactions] = useState<CashTransaction[]>(() => KostStorage.getCashTransactions());
+  const [electricityTransactions, setElectricityTransactions] = useState<ElectricityTransaction[]>(() => KostStorage.getElectricityTransactions());
   const [promptInput, setPromptInput] = useState("");
   const [isPromptSending, setIsPromptSending] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Timeframe selector for charts
   const [cashflowTimeframe, setCashflowTimeframe] = useState<"6m" | "1y" | "30d">("6m");
   const [tenantMetricView, setTenantMetricView] = useState<"occupancy" | "types">("occupancy");
 
   const loadData = async () => {
-    setIsLoading(true);
+    // 1. Sync immediately from local single source of truth
+    const mLocal = KostStorage.getOwnerMetrics();
+    const rLocal = KostStorage.getRooms();
+    const lLocal = KostStorage.getLeases();
+    const invLocal = KostStorage.getInvoices();
+    const tLocal = KostStorage.getTenants();
+    const cashLocal = KostStorage.getCashTransactions();
+    const elecLocal = KostStorage.getElectricityTransactions();
+
+    setMetrics(mLocal);
+    setRooms(rLocal);
+    setLeases(lLocal);
+    setInvoices(invLocal);
+    setTenants(tLocal);
+    setCashTransactions(cashLocal);
+    setElectricityTransactions(elecLocal);
+
+    // 2. Fetch from backend API if available
     try {
       const [m, r, l, inv, t, cash, elec] = await Promise.all([
-        KostApiClient.getDashboardSummary(),
-        KostApiClient.getRooms(),
-        KostApiClient.getLeases(),
-        KostApiClient.getInvoices(),
-        KostApiClient.getTenants(),
-        KostApiClient.getCashTransactions(),
-        KostApiClient.getElectricityTransactions(),
+        KostApiClient.getDashboardSummary().catch(() => null),
+        KostApiClient.getRooms().catch(() => null),
+        KostApiClient.getLeases().catch(() => null),
+        KostApiClient.getInvoices().catch(() => null),
+        KostApiClient.getTenants().catch(() => null),
+        KostApiClient.getCashTransactions().catch(() => null),
+        KostApiClient.getElectricityTransactions().catch(() => null),
       ]);
-      setMetrics(m);
-      setRooms(r);
-      setLeases(l);
-      setInvoices(inv);
-      setTenants(t);
-      setCashTransactions(cash);
-      setElectricityTransactions(elec);
-    } catch (err) {
-      console.error("Gagal memuat data dashboard:", err);
-    } finally {
-      setIsLoading(false);
+      if (m) setMetrics(m);
+      if (r && r.length > 0) setRooms(r);
+      if (l && l.length > 0) setLeases(l);
+      if (inv && inv.length > 0) setInvoices(inv);
+      if (t && t.length > 0) setTenants(t);
+      if (cash && cash.length > 0) setCashTransactions(cash);
+      if (elec && elec.length > 0) setElectricityTransactions(elec);
+    } catch {
+      // Backend not running; local storage state is active
     }
   };
 
   useEffect(() => {
     loadData();
+    const handleStorageChange = () => loadData();
+    window.addEventListener("kost_storage_change", handleStorageChange);
+    return () => window.removeEventListener("kost_storage_change", handleStorageChange);
   }, []);
 
-  if (isLoading && !metrics) {
-    return (
-      <div className="flex h-64 w-full items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#0A0A0A] border-t-transparent dark:border-white" />
-      </div>
-    );
-  }
-
-  if (!metrics) return null;
+  const activeMetrics = metrics || KostStorage.getOwnerMetrics();
 
   // Aggregate real transactions from Finance Tracker by month (PRIMARY KEY / SINGLE SOURCE OF TRUTH)
   const transactionsByMonth: Record<string, { income: number; expense: number; count: number }> = {};

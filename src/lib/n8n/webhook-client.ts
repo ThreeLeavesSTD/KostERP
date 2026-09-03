@@ -198,6 +198,7 @@ export interface ChatbotWebhookResponse {
   isNoItemFound?: boolean;
   hint?: string;
   error?: string;
+  status?: number;
 }
 
 /**
