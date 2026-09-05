@@ -5,6 +5,18 @@ const isValidUUID = (str?: string): boolean => {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 };
 
+const normalizeLeadPhone = (phone: string): string => {
+  let cleaned = String(phone || "").trim().replace(/[^\d+]/g, "");
+  if (cleaned.startsWith("0")) {
+    cleaned = "+62" + cleaned.slice(1);
+  } else if (cleaned.startsWith("62")) {
+    cleaned = "+" + cleaned;
+  } else if (!cleaned.startsWith("+") && cleaned.length > 5) {
+    cleaned = "+62" + cleaned;
+  }
+  return cleaned;
+};
+
 export const SupabaseService = {
   async getDefaultPropertyId(): Promise<string> {
     try {
@@ -945,5 +957,268 @@ export const SupabaseService = {
       electricityTransactionsCount,
       recentPayments: recentPayments.slice(0, 10),
     };
+  },
+
+  // Leads & Surveys
+  async getLeads(propertyId?: string) {
+    let query = supabase.from("leads").select(`
+      *,
+      user_profiles!leads_assigned_staff_id_fkey(full_name),
+      survey_schedules(
+        id,
+        scheduled_at,
+        status,
+        room_id,
+        rooms(room_number)
+      )
+    `).order("created_at", { ascending: false });
+
+    if (propertyId && isValidUUID(propertyId)) {
+      query = query.eq("property_id", propertyId);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.error("Error fetching leads:", error);
+      throw error;
+    }
+
+    return (data || []).map((lead: any) => ({
+      id: lead.id,
+      property_id: lead.property_id,
+      name: lead.name,
+      phone: lead.phone,
+      channel: lead.channel,
+      landing_page_campaign: lead.landing_page_campaign || undefined,
+      preferred_room_type: lead.preferred_room_type || undefined,
+      budget_min: lead.budget_min !== null && lead.budget_min !== undefined ? Number(lead.budget_min) : undefined,
+      budget_max: lead.budget_max !== null && lead.budget_max !== undefined ? Number(lead.budget_max) : undefined,
+      preferred_move_in_date: lead.preferred_move_in_date || undefined,
+      is_warm: Boolean(lead.is_warm),
+      status: lead.status,
+      assigned_staff_id: lead.assigned_staff_id || undefined,
+      assigned_staff_name: lead.user_profiles?.full_name || "",
+      follow_up_at: lead.follow_up_at || undefined,
+      notes: lead.notes || undefined,
+      created_at: lead.created_at,
+      updated_at: lead.updated_at || undefined,
+      surveys: (lead.survey_schedules || []).map((s: any) => ({
+        id: s.id,
+        property_id: lead.property_id,
+        lead_id: lead.id,
+        scheduled_at: s.scheduled_at,
+        status: s.status,
+        room_id: s.room_id || undefined,
+        room_number: s.rooms?.room_number || undefined,
+      })),
+    }));
+  },
+
+  async createLead(payload: any) {
+    const propId = isValidUUID(payload.property_id) ? payload.property_id : await this.getDefaultPropertyId();
+    const normalizedPhone = normalizeLeadPhone(payload.phone);
+    const upsertObj: any = {
+      property_id: propId,
+      name: String(payload.name || "").trim(),
+      phone: normalizedPhone,
+      channel: payload.channel || "whatsapp",
+      landing_page_campaign: payload.landing_page_campaign || null,
+      preferred_room_type: payload.preferred_room_type || null,
+      budget_min: payload.budget_min !== undefined && payload.budget_min !== null && payload.budget_min !== "" ? Number(payload.budget_min) : null,
+      budget_max: payload.budget_max !== undefined && payload.budget_max !== null && payload.budget_max !== "" ? Number(payload.budget_max) : null,
+      preferred_move_in_date: payload.preferred_move_in_date || null,
+      is_warm: Boolean(payload.is_warm),
+      status: payload.status || "new",
+      assigned_staff_id: isValidUUID(payload.assigned_staff_id) ? payload.assigned_staff_id : null,
+      follow_up_at: payload.follow_up_at || null,
+      notes: payload.notes || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (isValidUUID(payload.id)) {
+      upsertObj.id = payload.id;
+    }
+
+    const { data, error } = await supabase
+      .from("leads")
+      .upsert(upsertObj, { onConflict: "property_id,phone" })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async updateLead(id: string, payload: any) {
+    const updateObj: any = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (payload.name !== undefined) updateObj.name = String(payload.name).trim();
+    if (payload.phone !== undefined) updateObj.phone = normalizeLeadPhone(payload.phone);
+    if (payload.channel !== undefined) updateObj.channel = payload.channel;
+    if (payload.landing_page_campaign !== undefined) updateObj.landing_page_campaign = payload.landing_page_campaign;
+    if (payload.preferred_room_type !== undefined) updateObj.preferred_room_type = payload.preferred_room_type;
+    if (payload.budget_min !== undefined) updateObj.budget_min = payload.budget_min !== null && payload.budget_min !== "" ? Number(payload.budget_min) : null;
+    if (payload.budget_max !== undefined) updateObj.budget_max = payload.budget_max !== null && payload.budget_max !== "" ? Number(payload.budget_max) : null;
+    if (payload.preferred_move_in_date !== undefined) updateObj.preferred_move_in_date = payload.preferred_move_in_date;
+    if (payload.is_warm !== undefined) updateObj.is_warm = Boolean(payload.is_warm);
+    if (payload.status !== undefined) updateObj.status = payload.status;
+    if (payload.assigned_staff_id !== undefined) updateObj.assigned_staff_id = isValidUUID(payload.assigned_staff_id) ? payload.assigned_staff_id : null;
+    if (payload.follow_up_at !== undefined) updateObj.follow_up_at = payload.follow_up_at;
+    if (payload.notes !== undefined) updateObj.notes = payload.notes;
+
+    const { data, error } = await supabase
+      .from("leads")
+      .update(updateObj)
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteLead(id: string) {
+    const { error } = await supabase.from("leads").delete().eq("id", id);
+    if (error) throw error;
+    return { success: true };
+  },
+
+  async getSurveys(propertyId?: string) {
+    let query = supabase.from("survey_schedules").select(`
+      *,
+      leads!survey_schedules_lead_id_fkey(name, phone),
+      rooms!survey_schedules_room_id_fkey(room_number),
+      user_profiles!survey_schedules_assigned_staff_id_fkey(full_name)
+    `).order("scheduled_at", { ascending: true });
+
+    if (propertyId && isValidUUID(propertyId)) {
+      query = query.eq("property_id", propertyId);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.error("Error fetching surveys:", error);
+      throw error;
+    }
+
+    return (data || []).map((s: any) => ({
+      id: s.id,
+      property_id: s.property_id,
+      lead_id: s.lead_id,
+      lead_name: s.leads?.name || "",
+      lead_phone: s.leads?.phone || "",
+      room_id: s.room_id || undefined,
+      room_number: s.rooms?.room_number || undefined,
+      scheduled_at: s.scheduled_at,
+      status: s.status,
+      assigned_staff_id: s.assigned_staff_id || undefined,
+      assigned_staff_name: s.user_profiles?.full_name || "",
+      result_notes: s.result_notes || undefined,
+      created_at: s.created_at,
+      updated_at: s.updated_at || undefined,
+    }));
+  },
+
+  async createSurvey(payload: any) {
+    const propId = isValidUUID(payload.property_id) ? payload.property_id : await this.getDefaultPropertyId();
+    if (!isValidUUID(payload.lead_id)) {
+      throw new Error("lead_id is required and must be a valid UUID");
+    }
+
+    const insertObj: any = {
+      property_id: propId,
+      lead_id: payload.lead_id,
+      room_id: isValidUUID(payload.room_id) ? payload.room_id : null,
+      scheduled_at: payload.scheduled_at,
+      status: payload.status || "scheduled",
+      assigned_staff_id: isValidUUID(payload.assigned_staff_id) ? payload.assigned_staff_id : null,
+      result_notes: payload.result_notes || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    if (isValidUUID(payload.id)) {
+      insertObj.id = payload.id;
+    }
+
+    const { data, error } = await supabase
+      .from("survey_schedules")
+      .insert(insertObj)
+      .select()
+      .single();
+    if (error) throw error;
+
+    // Set parent lead's status to survey_scheduled and follow_up_at to scheduled_at if earlier in pipeline
+    try {
+      await supabase
+        .from("leads")
+        .update({
+          status: "survey_scheduled",
+          follow_up_at: payload.scheduled_at,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", payload.lead_id)
+        .in("status", ["new", "contacted", "follow_up"]);
+    } catch (syncErr) {
+      console.error("Could not update parent lead status on survey creation:", syncErr);
+    }
+
+    return data;
+  },
+
+  async updateSurvey(id: string, payload: any) {
+    const updateObj: any = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (payload.room_id !== undefined) {
+      updateObj.room_id = isValidUUID(payload.room_id) ? payload.room_id : null;
+    }
+    if (payload.scheduled_at !== undefined) updateObj.scheduled_at = payload.scheduled_at;
+    if (payload.status !== undefined) updateObj.status = payload.status;
+    if (payload.assigned_staff_id !== undefined) {
+      updateObj.assigned_staff_id = isValidUUID(payload.assigned_staff_id) ? payload.assigned_staff_id : null;
+    }
+    if (payload.result_notes !== undefined) updateObj.result_notes = payload.result_notes;
+
+    const { data, error } = await supabase
+      .from("survey_schedules")
+      .update(updateObj)
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+
+    if (payload.status && data.lead_id) {
+      let linkedLeadStatus: string | null = null;
+      if (payload.status === "scheduled" || payload.status === "confirmed") {
+        linkedLeadStatus = "survey_scheduled";
+      } else if (payload.status === "completed") {
+        linkedLeadStatus = "survey_done";
+      } else if (payload.status === "no_show" || payload.status === "cancelled") {
+        linkedLeadStatus = "follow_up";
+      }
+
+      if (linkedLeadStatus) {
+        try {
+          await supabase
+            .from("leads")
+            .update({
+              status: linkedLeadStatus,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", data.lead_id);
+        } catch (syncErr) {
+          console.error("Could not sync linked lead status on survey update:", syncErr);
+        }
+      }
+    }
+
+    return data;
+  },
+
+  async deleteSurvey(id: string) {
+    const { error } = await supabase.from("survey_schedules").delete().eq("id", id);
+    if (error) throw error;
+    return { success: true };
   },
 };

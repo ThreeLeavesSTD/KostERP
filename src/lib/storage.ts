@@ -1251,20 +1251,96 @@ export const KostStorage = {
 
   // CUSTOM FINANCE CATEGORIES
   getFinanceCategories: (
-    typeOrKindFilter?: TransactionType | "asset" | "liability"
+    typeOrKindFilter?: TransactionType | "asset" | "liability" | "wallet" | "transaction"
   ): FinanceCategory[] => {
-    const list = getItem<FinanceCategory[]>(
+    let list = getItem<FinanceCategory[]>(
       STORAGE_KEYS.FINANCE_CATEGORIES,
       initialFinanceCategories
     );
-    if (typeOrKindFilter) {
+
+    // Pastikan jika storage lokal lama belum ada kategori 'Operasional Kost', tambahkan secara otomatis
+    if (!list.some((c) => c.name.toLowerCase() === "operasional kost")) {
+      const opCat: FinanceCategory = {
+        id: "cat-exp-00",
+        name: "Operasional Kost",
+        scope: "transaction",
+        type: "expense",
+        category_kind: "expense",
+        icon: "MoreHorizontal",
+        is_default: true,
+        created_at: new Date().toISOString(),
+      };
+      list = [opCat, ...list];
+      setItem(STORAGE_KEYS.FINANCE_CATEGORIES, list);
+    }
+
+    if (!typeOrKindFilter) return list;
+
+    // Filter khusus Kategori Wallet (Dompet / Rekening / Hutang)
+    if (typeOrKindFilter === "wallet") {
       return list.filter(
         (c) =>
-          c.type === typeOrKindFilter ||
-          c.category_kind === typeOrKindFilter ||
-          (!c.category_kind && c.type === typeOrKindFilter)
+          c.scope === "wallet" ||
+          c.category_kind === "asset" ||
+          c.category_kind === "liability" ||
+          (!c.type && ["bank", "cash", "e-wallet", "ewallet", "business", "crypto", "digital bank", "hutang vendor", "cicilan / pinjaman", "deposit penghuni"].includes(c.name.toLowerCase()))
       );
     }
+
+    // Filter khusus Kategori Transaksi (Operasional, WiFi, Listrik, Sewa Kamar, dll)
+    if (typeOrKindFilter === "transaction") {
+      return list.filter(
+        (c) =>
+          c.scope === "transaction" ||
+          c.type === "income" ||
+          c.type === "expense" ||
+          c.category_kind === "income" ||
+          c.category_kind === "expense"
+      );
+    }
+
+    // Filter Kategori Aset Wallet
+    if (typeOrKindFilter === "asset") {
+      return list.filter(
+        (c) =>
+          (c.category_kind === "asset" || (c.scope === "wallet" && c.category_kind !== "liability")) &&
+          c.type !== "expense" &&
+          c.type !== "income"
+      );
+    }
+
+    // Filter Kategori Liability Wallet
+    if (typeOrKindFilter === "liability") {
+      return list.filter(
+        (c) =>
+          c.category_kind === "liability" &&
+          c.type !== "expense" &&
+          c.type !== "income"
+      );
+    }
+
+    // Filter Kategori Transaksi Pengeluaran (Expense)
+    if (typeOrKindFilter === "expense") {
+      return list.filter(
+        (c) =>
+          (c.type === "expense" || c.category_kind === "expense") &&
+          c.scope !== "wallet" &&
+          c.category_kind !== "asset" &&
+          c.category_kind !== "liability"
+      );
+    }
+
+    // Filter Kategori Transaksi Pemasukan (Income)
+    if (typeOrKindFilter === "income") {
+      return list.filter(
+        (c) =>
+          (c.type === "income" || c.category_kind === "income") &&
+          c.scope !== "wallet" &&
+          c.category_kind !== "asset" &&
+          c.category_kind !== "liability"
+      );
+    }
+
     return list;
   },
 
@@ -1272,7 +1348,7 @@ export const KostStorage = {
     data: Omit<FinanceCategory, "id" | "created_at">
   ): FinanceCategory => {
     const list = KostStorage.getFinanceCategories();
-    const prefix = data.category_kind || data.type || "gen";
+    const prefix = data.category_kind || data.type || data.scope || "gen";
     const newCat: FinanceCategory = {
       ...data,
       id: `cat-${prefix.slice(0, 3)}-${Date.now().toString().slice(-4)}`,

@@ -206,8 +206,7 @@ export interface ChatbotWebhookResponse {
  */
 export async function sendChatbotMessageToN8n(
   message: string,
-  context?: Record<string, unknown>,
-  customWebhookUrl?: string
+  context?: Record<string, unknown>
 ): Promise<ChatbotWebhookResponse> {
   try {
     const response = await fetch("/api/assistant/chat", {
@@ -218,7 +217,6 @@ export async function sendChatbotMessageToN8n(
       body: JSON.stringify({
         message,
         context,
-        webhook_url: customWebhookUrl,
       }),
     });
 

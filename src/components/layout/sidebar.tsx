@@ -15,6 +15,7 @@ import {
   UserPlus,
   User,
   Wallet,
+  Target,
 } from "lucide-react";
 import { UserRole } from "@/types";
 import { hasPermission } from "@/lib/permissions";
@@ -59,6 +60,11 @@ export function Sidebar({ currentRole, activeTab, onTabChange }: SidebarProps) {
       id: "tenants",
       label: "Penghuni & Sewa",
       icon: Users,
+    },
+    {
+      id: "leads",
+      label: "Leads & Survey",
+      icon: Target,
     },
     {
       id: "electricity",

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { LayoutDashboard, DoorClosed, Users, Zap, Receipt, FileSpreadsheet, CreditCard, Sparkles, UserPlus, User, Wallet } from "lucide-react";
+import { LayoutDashboard, DoorClosed, Users, Zap, Receipt, FileSpreadsheet, CreditCard, Sparkles, UserPlus, User, Wallet, Target } from "lucide-react";
 import { UserRole } from "@/types";
 import { hasPermission } from "@/lib/permissions";
 
@@ -19,6 +19,7 @@ export function MobileNav({ currentRole, activeTab, onTabChange }: MobileNavProp
     { id: "staff-management", label: "Karyawan", icon: UserPlus },
     { id: "rooms", label: "Kamar", icon: DoorClosed },
     { id: "tenants", label: "Penghuni", icon: Users },
+    { id: "leads", label: "Leads", icon: Target },
     { id: "electricity", label: "Token", icon: Zap },
     { id: "billing", label: "Tagihan", icon: Receipt },
     { id: "owner-audit", label: "Laporan", icon: FileSpreadsheet },

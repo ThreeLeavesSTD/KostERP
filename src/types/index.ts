@@ -221,7 +221,8 @@ export type FeaturePermission =
   | "owner-audit"
   | "billing-settings"
   | "staff-management"
-  | "profile";
+  | "profile"
+  | "leads";
 
 export interface RolePermissionConfig {
   id: string;
@@ -267,7 +268,8 @@ export type WalletKind = "asset" | "liability";
 export interface FinanceCategory {
   id: string;
   name: string;
-  type?: TransactionType;
+  scope?: "wallet" | "transaction"; // Pemisahan eksplisit: Kategori Wallet vs Kategori Transaksi
+  type?: TransactionType; // "income" | "expense" untuk transaksi
   category_kind?: "asset" | "liability" | "income" | "expense";
   icon?: string;
   is_default?: boolean;
@@ -309,5 +311,69 @@ export interface CashTransaction {
   created_at: string;
 }
 
+export type LeadStatus =
+  | "new"
+  | "contacted"
+  | "follow_up"
+  | "survey_scheduled"
+  | "survey_done"
+  | "negotiation"
+  | "won"
+  | "lost";
 
+export type LeadChannel =
+  | "whatsapp"
+  | "landing_page"
+  | "instagram"
+  | "tiktok"
+  | "facebook"
+  | "referral"
+  | "marketplace"
+  | "walk_in"
+  | "other";
 
+export type SurveyStatus =
+  | "scheduled"
+  | "confirmed"
+  | "completed"
+  | "no_show"
+  | "cancelled";
+
+export interface Lead {
+  id: string;
+  property_id: string;
+  name: string;
+  phone: string;
+  channel: LeadChannel;
+  landing_page_campaign?: string;
+  preferred_room_type?: string;
+  budget_min?: number;
+  budget_max?: number;
+  preferred_move_in_date?: string;
+  is_warm: boolean;
+  status: LeadStatus;
+  assigned_staff_id?: string;
+  assigned_staff_name?: string;
+  follow_up_at?: string;
+  notes?: string;
+  surveys?: SurveySchedule[];
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface SurveySchedule {
+  id: string;
+  property_id: string;
+  lead_id: string;
+  lead_name?: string;
+  lead_phone?: string;
+  room_id?: string;
+  room_number?: string;
+  scheduled_at: string;
+  status: SurveyStatus;
+  assigned_staff_id?: string;
+  assigned_staff_name?: string;
+  result_notes?: string;
+  created_at: string;
+  updated_at?: string;
+}

@@ -17,6 +17,8 @@ import dashboardRoutes from "./routes/dashboard.routes";
 import paymentMethodsRoutes from "./routes/payment-methods.routes";
 import staffRoutes from "./routes/staff.routes";
 import rolesRoutes from "./routes/roles.routes";
+import leadsRoutes from "./routes/leads.routes";
+import surveysRoutes from "./routes/surveys.routes";
 import { requireAuth } from "./middleware/auth";
 
 dotenv.config();
@@ -75,6 +77,8 @@ app.use("/api/complaints", requireAuth, complaintsRoutes);
 app.use("/api/finance", requireAuth, financeRoutes);
 app.use("/api/staff", requireAuth, staffRoutes);
 app.use("/api/roles", requireAuth, rolesRoutes);
+app.use("/api/leads", requireAuth, leadsRoutes);
+app.use("/api/surveys", requireAuth, surveysRoutes);
 
 // Global Error Handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {

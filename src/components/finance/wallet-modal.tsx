@@ -59,10 +59,14 @@ export function WalletModal({
   useEffect(() => {
     if (isOpen) {
       let isMounted = true;
-      KostApiClient.getFinanceCategories()
+      const targetKind = walletToEdit ? (walletToEdit.wallet_kind || "asset") : defaultKind;
+      KostApiClient.getFinanceCategories(targetKind)
         .then((cats) => {
           if (!isMounted) return;
-          setCategories(cats);
+          const walletCats = cats.filter(
+            (c) => c.scope === "wallet" || c.category_kind === "asset" || c.category_kind === "liability" || (!c.type && !c.category_kind)
+          );
+          setCategories(walletCats);
         })
         .catch(() => {});
 
@@ -88,6 +92,15 @@ export function WalletModal({
       };
     }
   }, [isOpen, walletToEdit, defaultKind]);
+
+  // Hapus angka 0 di depan (leading zero) dan format kelipatan ribuan
+  const handleBalanceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawDigits = e.target.value.replace(/\D/g, "");
+    // Hapus angka 0 di depan (cth: "05000000" -> "5000000", "0" -> "0")
+    const sanitized = rawDigits.replace(/^0+(?!$)/, "");
+    const val = sanitized === "" ? 0 : parseInt(sanitized, 10);
+    setBalance(val);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -268,11 +281,21 @@ export function WalletModal({
                 onChange={(e) => setCategoryName(e.target.value)}
                 className="w-full rounded-2xl border border-neutral-200/80 bg-neutral-50 px-4 py-2.5 text-xs font-bold text-neutral-900 focus:ring-2 focus:ring-[#0A0A0A] focus:outline-none dark:bg-neutral-900 dark:border-white/10 dark:text-white"
               >
-                {categories.map((c) => (
-                  <option key={c.id} value={c.name}>
-                    {c.name}
-                  </option>
-                ))}
+                {Array.from(
+                  new Set([
+                    ...(walletKind === "asset"
+                      ? ["BANK", "E-Wallet", "Kas Tunai", "Business", "Digital Bank", "Crypto"]
+                      : ["Hutang Vendor", "Cicilan / Pinjaman Operasional", "Deposit Penghuni (Titipan)"]),
+                    ...categories.map((c) => c.name),
+                    categoryName,
+                  ])
+                )
+                  .filter(Boolean)
+                  .map((catName) => (
+                    <option key={catName} value={catName}>
+                      {catName}
+                    </option>
+                  ))}
               </select>
             </div>
 
@@ -280,15 +303,18 @@ export function WalletModal({
               <label className="block text-[11px] font-black uppercase tracking-wider text-neutral-500 dark:text-neutral-400 mb-1.5">
                 BALANCE
               </label>
-              <div className="relative">
+              <div className="relative flex items-center">
+                <span className="pointer-events-none absolute left-3.5 text-xs font-black text-neutral-400">
+                  Rp
+                </span>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   required
-                  min={0}
-                  step={10000}
-                  value={balance}
-                  onChange={(e) => setBalance(Number(e.target.value))}
-                  className="w-full rounded-2xl border border-neutral-200/80 bg-neutral-50 px-4 py-2.5 text-xs font-black text-neutral-900 focus:ring-2 focus:ring-[#0A0A0A] focus:outline-none dark:bg-neutral-900 dark:border-white/10 dark:text-white"
+                  placeholder="0"
+                  value={balance === 0 ? "" : balance.toLocaleString("id-ID")}
+                  onChange={handleBalanceChange}
+                  className="w-full rounded-2xl border border-neutral-200/80 bg-neutral-50 pl-10 pr-4 py-2.5 text-xs font-black text-neutral-900 focus:ring-2 focus:ring-[#0A0A0A] focus:outline-none dark:bg-neutral-900 dark:border-white/10 dark:text-white"
                 />
               </div>
               <p className="text-[10px] font-mono font-bold text-neutral-400 mt-1">

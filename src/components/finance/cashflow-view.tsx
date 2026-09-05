@@ -71,15 +71,17 @@ export function CashFlowView({ currentRole = "owner" }: CashFlowViewProps) {
   const [toDate, setToDate] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [walletFilter, setWalletFilter] = useState("all");
+  const [txCategories, setTxCategories] = useState<FinanceCategory[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
 
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [list, wals] = await Promise.all([
+      const [list, wals, cats] = await Promise.all([
         KostApiClient.getCashTransactions(),
         KostApiClient.getWallets(),
+        KostApiClient.getFinanceCategories("transaction"),
       ]);
 
       const balances = wals.map((w) => {
@@ -97,6 +99,7 @@ export function CashFlowView({ currentRole = "owner" }: CashFlowViewProps) {
       setTransactions(list);
       setWallets(wals);
       setWalletBalances(balances);
+      setTxCategories(cats);
     } catch (err) {
       console.error("Gagal memuat data keuangan:", err);
     } finally {
@@ -726,6 +729,57 @@ export function CashFlowView({ currentRole = "owner" }: CashFlowViewProps) {
                   </div>
                 </div>
               )}
+
+              {/* Category & Wallet Filters */}
+              <div className="flex items-center gap-2.5 flex-wrap pt-2 border-t border-neutral-100 dark:border-white/5">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-black uppercase text-neutral-400">
+                    Kategori Transaksi:
+                  </span>
+                  <select
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    className="rounded-xl border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-xs font-bold text-neutral-800 focus:outline-none dark:bg-neutral-900 dark:border-white/10 dark:text-white"
+                  >
+                    <option value="all">Semua Kategori</option>
+                    {txCategories.map((c) => (
+                      <option key={c.id} value={c.name}>
+                        {c.type === "expense" ? "💸" : "💰"} {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-black uppercase text-neutral-400">
+                    Dompet/Rekening:
+                  </span>
+                  <select
+                    value={walletFilter}
+                    onChange={(e) => setWalletFilter(e.target.value)}
+                    className="rounded-xl border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-xs font-bold text-neutral-800 focus:outline-none dark:bg-neutral-900 dark:border-white/10 dark:text-white"
+                  >
+                    <option value="all">Semua Rekening/Dompet</option>
+                    {wallets.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name} ({w.category_name || w.type.toUpperCase()})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {(categoryFilter !== "all" || walletFilter !== "all") && (
+                  <button
+                    onClick={() => {
+                      setCategoryFilter("all");
+                      setWalletFilter("all");
+                    }}
+                    className="text-[10px] font-bold text-rose-500 hover:underline ml-1"
+                  >
+                    Reset Filter
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 

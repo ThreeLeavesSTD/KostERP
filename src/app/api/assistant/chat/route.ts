@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+const BACKEND_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000/api";
 const DEFAULT_N8N_WEBHOOK =
   process.env.N8N_WEBHOOK_CHATBOT ||
   process.env.NEXT_PUBLIC_N8N_WEBHOOK_CHATBOT ||
@@ -35,7 +36,6 @@ export async function POST(req: Request) {
       message,
       context,
       session_id,
-      webhook_url,
     } = body;
 
     if (!message || typeof message !== "string" || !message.trim()) {
@@ -45,12 +45,39 @@ export async function POST(req: Request) {
       );
     }
 
-    const targetUrl = (webhook_url && typeof webhook_url === "string" && webhook_url.trim())
-      ? webhook_url.trim()
-      : DEFAULT_N8N_WEBHOOK;
-
     const trimmedMessage = message.trim();
     const sessionId = session_id || "kost-concierge-web-session";
+
+    // 1. Coba delegasikan ke Backend Express (/api/webhooks/chatbot) yang membaca backend/.env
+    try {
+      const backendController = new AbortController();
+      const backendTimeoutId = setTimeout(() => backendController.abort(), 4000);
+      const backendRes = await fetch(`${BACKEND_BASE}/webhooks/chatbot`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: trimmedMessage,
+          context,
+          session_id: sessionId,
+        }),
+        signal: backendController.signal,
+      });
+      clearTimeout(backendTimeoutId);
+
+      if (backendRes.ok) {
+        const backendData = await backendRes.json();
+        return NextResponse.json(backendData);
+      }
+    } catch {
+      // Backend Express offline atau sedang tidak berjalan -> fallback langsung ke webhook n8n dari env
+    }
+
+    // 2. Webhook endpoint diambil dari environment variable
+    const targetUrl =
+      process.env.N8N_WEBHOOK_CHATBOT ||
+      process.env.NEXT_PUBLIC_N8N_WEBHOOK_CHATBOT ||
+      DEFAULT_N8N_WEBHOOK;
+
 
     // Payload multi-kompatibel untuk berbagai node di n8n (Webhook, LangChain, Chat Trigger, AI Agent)
     const n8nPayload = {

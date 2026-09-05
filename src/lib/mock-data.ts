@@ -930,37 +930,36 @@ export const initialFinanceWallets: FinanceWallet[] = [
 ];
 
 export const initialFinanceCategories: FinanceCategory[] = [
-  // Kategori Aset (Wallets)
-  { id: "cat-ast-01", name: "Business", category_kind: "asset", icon: "payments", is_default: true, created_at: "2026-01-01T00:00:00Z" },
-  { id: "cat-ast-02", name: "Cash", category_kind: "asset", icon: "cash", is_default: true, created_at: "2026-01-01T00:00:00Z" },
-  { id: "cat-ast-03", name: "Bank", category_kind: "asset", icon: "bank", is_default: true, created_at: "2026-01-01T00:00:00Z" },
-  { id: "cat-ast-04", name: "E-Wallet", category_kind: "asset", icon: "ewallet", is_default: true, created_at: "2026-01-01T00:00:00Z" },
-  { id: "cat-ast-05", name: "Crypto", category_kind: "asset", icon: "crypto", is_default: false, created_at: "2026-01-01T00:00:00Z" },
-  { id: "cat-ast-06", name: "Digital Bank", category_kind: "asset", icon: "bank", is_default: true, created_at: "2026-01-01T00:00:00Z" },
+  // === KATEGORI WALLET (DOMPET / REKENING KAS / KEWAJIBAN) ===
+  { id: "cat-wal-01", name: "BANK", scope: "wallet", category_kind: "asset", icon: "bank", is_default: true, created_at: "2026-01-01T00:00:00Z" },
+  { id: "cat-wal-02", name: "E-Wallet", scope: "wallet", category_kind: "asset", icon: "ewallet", is_default: true, created_at: "2026-01-01T00:00:00Z" },
+  { id: "cat-wal-03", name: "Kas Tunai", scope: "wallet", category_kind: "asset", icon: "cash", is_default: true, created_at: "2026-01-01T00:00:00Z" },
+  { id: "cat-wal-04", name: "Business", scope: "wallet", category_kind: "asset", icon: "payments", is_default: true, created_at: "2026-01-01T00:00:00Z" },
+  { id: "cat-wal-05", name: "Digital Bank", scope: "wallet", category_kind: "asset", icon: "bank", is_default: true, created_at: "2026-01-01T00:00:00Z" },
+  { id: "cat-wal-06", name: "Crypto", scope: "wallet", category_kind: "asset", icon: "crypto", is_default: false, created_at: "2026-01-01T00:00:00Z" },
+  { id: "cat-wal-07", name: "Hutang Vendor", scope: "wallet", category_kind: "liability", icon: "liability", is_default: true, created_at: "2026-01-01T00:00:00Z" },
+  { id: "cat-wal-08", name: "Cicilan / Pinjaman Operasional", scope: "wallet", category_kind: "liability", icon: "liability", is_default: true, created_at: "2026-01-01T00:00:00Z" },
+  { id: "cat-wal-09", name: "Deposit Penghuni (Titipan)", scope: "wallet", category_kind: "liability", icon: "liability", is_default: true, created_at: "2026-01-01T00:00:00Z" },
 
-  // Kategori Kewajiban (Liabilities)
-  { id: "cat-lia-01", name: "Hutang Vendor / Supplier", category_kind: "liability", icon: "liability", is_default: true, created_at: "2026-01-01T00:00:00Z" },
-  { id: "cat-lia-02", name: "Cicilan / Pinjaman Operasional", category_kind: "liability", icon: "liability", is_default: true, created_at: "2026-01-01T00:00:00Z" },
-  { id: "cat-lia-03", name: "Deposit Penghuni (Titipan)", category_kind: "liability", icon: "liability", is_default: true, created_at: "2026-01-01T00:00:00Z" },
+  // === KATEGORI TRANSAKSI: PENGELUARAN (EXPENSE OPERASIONAL) ===
+  { id: "cat-exp-00", name: "Operasional Kost", scope: "transaction", type: "expense", category_kind: "expense", icon: "MoreHorizontal", is_default: true, created_at: "2026-01-01T00:00:00Z" },
+  { id: "cat-exp-01", name: "Internet & WiFi Dedicated", scope: "transaction", type: "expense", category_kind: "expense", icon: "Wifi", is_default: true, created_at: "2026-01-01T00:00:00Z" },
+  { id: "cat-exp-02", name: "Gaji Karyawan & Kebersihan", scope: "transaction", type: "expense", category_kind: "expense", icon: "Users", is_default: true, created_at: "2026-01-01T00:00:00Z" },
+  { id: "cat-exp-03", name: "Listrik PLN Fasilitas Umum", scope: "transaction", type: "expense", category_kind: "expense", icon: "Zap", is_default: true, created_at: "2026-01-01T00:00:00Z" },
+  { id: "cat-exp-04", name: "Perbaikan AC & Pipa Air", scope: "transaction", type: "expense", category_kind: "expense", icon: "Wrench", is_default: true, created_at: "2026-01-01T00:00:00Z" },
+  { id: "cat-exp-05", name: "Perlengkapan & Galon Air", scope: "transaction", type: "expense", category_kind: "expense", icon: "Package", is_default: true, created_at: "2026-01-01T00:00:00Z" },
+  { id: "cat-exp-06", name: "Iuran RT, Keamanan & Sampah", scope: "transaction", type: "expense", category_kind: "expense", icon: "Shield", is_default: true, created_at: "2026-01-01T00:00:00Z" },
+  { id: "cat-exp-07", name: "Iklan & Pemasaran Kost", scope: "transaction", type: "expense", category_kind: "expense", icon: "Megaphone", is_default: true, created_at: "2026-01-01T00:00:00Z" },
+  { id: "cat-exp-08", name: "Renovasi & Cat Ulang Unit", scope: "transaction", type: "expense", category_kind: "expense", icon: "Wrench", is_default: false, created_at: "2026-01-01T00:00:00Z" },
+  { id: "cat-exp-09", name: "Pengeluaran Operasional Lain", scope: "transaction", type: "expense", category_kind: "expense", icon: "MoreHorizontal", is_default: true, created_at: "2026-01-01T00:00:00Z" },
 
-  // Pengeluaran (Expense)
-  { id: "cat-exp-01", name: "Internet & WiFi Dedicated", type: "expense", category_kind: "expense", icon: "Wifi", is_default: true, created_at: "2026-01-01T00:00:00Z" },
-  { id: "cat-exp-02", name: "Gaji Karyawan & Kebersihan", type: "expense", category_kind: "expense", icon: "Users", is_default: true, created_at: "2026-01-01T00:00:00Z" },
-  { id: "cat-exp-03", name: "Listrik PLN Fasilitas Umum", type: "expense", category_kind: "expense", icon: "Zap", is_default: true, created_at: "2026-01-01T00:00:00Z" },
-  { id: "cat-exp-04", name: "Perbaikan AC & Pipa Air", type: "expense", category_kind: "expense", icon: "Wrench", is_default: true, created_at: "2026-01-01T00:00:00Z" },
-  { id: "cat-exp-05", name: "Perlengkapan & Galon Air", type: "expense", category_kind: "expense", icon: "Package", is_default: true, created_at: "2026-01-01T00:00:00Z" },
-  { id: "cat-exp-06", name: "Iuran RT, Keamanan & Sampah", type: "expense", category_kind: "expense", icon: "Shield", is_default: true, created_at: "2026-01-01T00:00:00Z" },
-  { id: "cat-exp-07", name: "Iklan & Pemasaran Kost", type: "expense", category_kind: "expense", icon: "Megaphone", is_default: true, created_at: "2026-01-01T00:00:00Z" },
-  { id: "cat-exp-08", name: "Renovasi & Cat Ulang Unit", type: "expense", category_kind: "expense", icon: "Wrench", is_default: false, created_at: "2026-01-01T00:00:00Z" },
-  { id: "cat-exp-09", name: "Pengeluaran Operasional Lain", type: "expense", category_kind: "expense", icon: "MoreHorizontal", is_default: true, created_at: "2026-01-01T00:00:00Z" },
-
-  // Pemasukan (Income)
-  { id: "cat-inc-01", name: "Sewa Kamar Tunai", type: "income", category_kind: "income", icon: "Home", is_default: true, created_at: "2026-01-01T00:00:00Z" },
-  { id: "cat-inc-02", name: "Laba Penjualan Token PLN", type: "income", category_kind: "income", icon: "Zap", is_default: true, created_at: "2026-01-01T00:00:00Z" },
-  { id: "cat-inc-03", name: "Jasa Titip Laundry Penghuni", type: "income", category_kind: "income", icon: "Package", is_default: true, created_at: "2026-01-01T00:00:00Z" },
-  { id: "cat-inc-04", name: "Sewa Parkir Mobil Tambahan", type: "income", category_kind: "income", icon: "Tag", is_default: true, created_at: "2026-01-01T00:00:00Z" },
-  { id: "cat-inc-05", name: "Denda Keterlambatan Sewa", type: "income", category_kind: "income", icon: "DollarSign", is_default: true, created_at: "2026-01-01T00:00:00Z" },
-  { id: "cat-inc-06", name: "Pemasukan Lainnya", type: "income", category_kind: "income", icon: "MoreHorizontal", is_default: true, created_at: "2026-01-01T00:00:00Z" },
+  // === KATEGORI TRANSAKSI: PEMASUKAN (INCOME) ===
+  { id: "cat-inc-01", name: "Sewa Kamar Tunai", scope: "transaction", type: "income", category_kind: "income", icon: "Home", is_default: true, created_at: "2026-01-01T00:00:00Z" },
+  { id: "cat-inc-02", name: "Laba Penjualan Token PLN", scope: "transaction", type: "income", category_kind: "income", icon: "Zap", is_default: true, created_at: "2026-01-01T00:00:00Z" },
+  { id: "cat-inc-03", name: "Jasa Titip Laundry Penghuni", scope: "transaction", type: "income", category_kind: "income", icon: "Package", is_default: true, created_at: "2026-01-01T00:00:00Z" },
+  { id: "cat-inc-04", name: "Sewa Parkir Mobil Tambahan", scope: "transaction", type: "income", category_kind: "income", icon: "Tag", is_default: true, created_at: "2026-01-01T00:00:00Z" },
+  { id: "cat-inc-05", name: "Denda Keterlambatan Sewa", scope: "transaction", type: "income", category_kind: "income", icon: "DollarSign", is_default: true, created_at: "2026-01-01T00:00:00Z" },
+  { id: "cat-inc-06", name: "Pemasukan Lainnya", scope: "transaction", type: "income", category_kind: "income", icon: "MoreHorizontal", is_default: true, created_at: "2026-01-01T00:00:00Z" },
 ];
 
 

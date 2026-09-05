@@ -11,9 +11,12 @@ import {
   CashTransaction,
   FinanceWallet,
   FinanceCategory,
+  TransactionType,
   OwnerDashboardMetrics,
   UserProfile,
   RolePermissionConfig,
+  Lead,
+  SurveySchedule,
 } from "@/types";
 import { createClient } from "./supabase/client";
 import { KostStorage } from "./storage";
@@ -416,9 +419,12 @@ export const KostApiClient = {
   },
 
   // Finance Categories
-  async getFinanceCategories(): Promise<FinanceCategory[]> {
-    return fetchWithFallback<FinanceCategory[]>("/finance/categories", () =>
-      KostStorage.getFinanceCategories()
+  async getFinanceCategories(
+    filter?: TransactionType | "asset" | "liability" | "wallet" | "transaction"
+  ): Promise<FinanceCategory[]> {
+    return fetchWithFallback<FinanceCategory[]>(
+      filter ? `/finance/categories?filter=${filter}` : "/finance/categories",
+      () => KostStorage.getFinanceCategories(filter)
     );
   },
 
@@ -621,6 +627,65 @@ export const KostApiClient = {
   async deleteRole(id: string): Promise<{ success: boolean; message?: string }> {
     return fetchWithFallback<{ success: boolean; message?: string }>(
       `/roles/${id}`,
+      () => ({ success: true }),
+      {
+        method: "DELETE",
+      }
+    );
+  },
+
+  // Leads & Surveys
+  async getLeads(propertyId?: string): Promise<Lead[]> {
+    const query = propertyId ? `?propertyId=${propertyId}` : "";
+    return fetchWithFallback<Lead[]>(`/leads${query}`, () => []);
+  },
+
+  async createLead(payload: Partial<Lead>): Promise<Lead> {
+    return fetchWithFallback<Lead>("/leads", () => payload as Lead, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateLead(id: string, payload: Partial<Lead>): Promise<Lead> {
+    return fetchWithFallback<Lead>(`/leads/${id}`, () => payload as Lead, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteLead(id: string): Promise<{ success: boolean }> {
+    return fetchWithFallback<{ success: boolean }>(
+      `/leads/${id}`,
+      () => ({ success: true }),
+      {
+        method: "DELETE",
+      }
+    );
+  },
+
+  async getSurveys(propertyId?: string): Promise<SurveySchedule[]> {
+    const query = propertyId ? `?propertyId=${propertyId}` : "";
+    return fetchWithFallback<SurveySchedule[]>(`/surveys${query}`, () => []);
+  },
+
+  async createSurvey(payload: Partial<SurveySchedule>): Promise<SurveySchedule> {
+    return fetchWithFallback<SurveySchedule>("/surveys", () => payload as SurveySchedule, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateSurvey(id: string, payload: Partial<SurveySchedule>): Promise<SurveySchedule> {
+    return fetchWithFallback<SurveySchedule>(`/surveys/${id}`, () => payload as SurveySchedule, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteSurvey(id: string): Promise<{ success: boolean }> {
+    return fetchWithFallback<{ success: boolean }>(
+      `/surveys/${id}`,
       () => ({ success: true }),
       {
         method: "DELETE",

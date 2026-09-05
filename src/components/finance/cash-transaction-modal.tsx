@@ -58,10 +58,16 @@ export function CashTransactionModal({
   const refreshLists = async (currentType: TransactionType) => {
     try {
       const [cats, wals] = await Promise.all([
-        KostApiClient.getFinanceCategories(),
+        KostApiClient.getFinanceCategories(currentType),
         KostApiClient.getWallets(),
       ]);
-      const filteredCats = cats.filter((c) => c.type === currentType);
+      const filteredCats = cats.filter(
+        (c) =>
+          (c.type === currentType || c.category_kind === currentType || c.scope === "transaction") &&
+          c.scope !== "wallet" &&
+          c.category_kind !== "asset" &&
+          c.category_kind !== "liability"
+      );
       setCategoriesList(filteredCats);
       setWalletsList(wals);
 
@@ -80,10 +86,16 @@ export function CashTransactionModal({
       const initialType = transactionToEdit ? transactionToEdit.type : "expense";
       setType(initialType);
 
-      Promise.all([KostApiClient.getFinanceCategories(), KostApiClient.getWallets()])
+      Promise.all([KostApiClient.getFinanceCategories(initialType), KostApiClient.getWallets()])
         .then(([cats, wals]) => {
           if (!isMounted) return;
-          const filteredCats = cats.filter((c) => c.type === initialType);
+          const filteredCats = cats.filter(
+            (c) =>
+              (c.type === initialType || c.category_kind === initialType || c.scope === "transaction") &&
+              c.scope !== "wallet" &&
+              c.category_kind !== "asset" &&
+              c.category_kind !== "liability"
+          );
           setCategoriesList(filteredCats);
           setWalletsList(wals);
 
@@ -114,26 +126,41 @@ export function CashTransactionModal({
     }
   }, [transactionToEdit, isOpen]);
 
+  // Hapus angka 0 di depan dan format kelipatan ribuan
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawDigits = e.target.value.replace(/\D/g, "");
+    const sanitized = rawDigits.replace(/^0+(?!$)/, "");
+    const val = sanitized === "" ? 0 : parseInt(sanitized, 10);
+    setAmount(val);
+  };
+
   const handleTypeChange = async (newType: TransactionType) => {
     setType(newType);
     try {
-      const cats = await KostApiClient.getFinanceCategories();
-      const filtered = cats.filter((c) => c.type === newType);
-      setCategoriesList(filtered);
-      if (filtered.length > 0) {
-        setCategoryName(filtered[0].name);
+      const cats = await KostApiClient.getFinanceCategories(newType);
+      const filteredCats = cats.filter(
+        (c) =>
+          (c.type === newType || c.category_kind === newType || c.scope === "transaction") &&
+          c.scope !== "wallet" &&
+          c.category_kind !== "asset" &&
+          c.category_kind !== "liability"
+      );
+      setCategoriesList(filteredCats);
+      if (filteredCats.length > 0) {
+        setCategoryName(filteredCats[0].name);
       }
     } catch {}
   };
 
-  const handleCreateNewCategory = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreateNewCategory = async () => {
     if (!newCategoryName.trim()) return;
 
     try {
       const created = await KostApiClient.createFinanceCategory({
         name: newCategoryName.trim(),
+        scope: "transaction",
         type,
+        category_kind: type,
         is_default: false,
       });
 
@@ -431,19 +458,31 @@ export function CashTransactionModal({
           </div>
 
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-1">
-              Nominal (Rp) *
-            </label>
-            <input
-              type="number"
-              required
-              min={1000}
-              step={5000}
-              value={amount}
-              onChange={(e) => setAmount(Number(e.target.value))}
-              className="w-full rounded-2xl border border-neutral-200/80 bg-neutral-50 px-3.5 py-2.5 text-xs font-bold text-neutral-900 focus:ring-2 focus:ring-[#0A0A0A] focus:outline-none dark:bg-neutral-800 dark:border-neutral-700 dark:text-white"
-            />
-            <p className="text-[10px] font-mono font-bold text-neutral-400 mt-0.5">
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500">
+                Nominal (Rp) *
+              </label>
+              {amount > 0 && (
+                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                  Kelipatan 1.000
+                </span>
+              )}
+            </div>
+            <div className="relative flex items-center">
+              <span className="pointer-events-none absolute left-3.5 text-xs font-black text-neutral-400">
+                Rp
+              </span>
+              <input
+                type="text"
+                inputMode="numeric"
+                required
+                placeholder="0"
+                value={amount === 0 ? "" : amount.toLocaleString("id-ID")}
+                onChange={handleAmountChange}
+                className="w-full rounded-2xl border border-neutral-200/80 bg-neutral-50 pl-10 pr-3.5 py-2.5 text-xs font-bold text-neutral-900 focus:ring-2 focus:ring-[#0A0A0A] focus:outline-none dark:bg-neutral-800 dark:border-neutral-700 dark:text-white"
+              />
+            </div>
+            <p className="text-[10px] font-mono font-bold text-neutral-400 mt-1">
               Format: {formatRupiah(amount)}
             </p>
           </div>

@@ -17,6 +17,7 @@ import { AIAssistantView } from "@/components/assistant/ai-assistant-view";
 import { ProfileView } from "@/components/profile/profile-view";
 import { StaffManagementView } from "@/components/staff/staff-management-view";
 import { CashFlowView } from "@/components/finance/cashflow-view";
+import { LeadsView } from "@/components/leads/leads-view";
 
 import { useAuth } from "@/lib/auth-context";
 import { hasPermission, getPermissionsForRole } from "@/lib/permissions";
@@ -152,6 +153,7 @@ export default function HomePage() {
               />
             )}
             {activeTab === "tenants" && <TenantsView />}
+            {activeTab === "leads" && <LeadsView currentRole={currentRole} />}
             {activeTab === "electricity" && <ElectricityView />}
             {activeTab === "billing" && <BillingView />}
             {activeTab === "billing-settings" && <PaymentSettingsView />}

@@ -12,6 +12,7 @@ export const ALL_PERMISSIONS = [
   "owner-audit",
   "billing-settings",
   "profile",
+  "leads",
 ];
 
 /**
