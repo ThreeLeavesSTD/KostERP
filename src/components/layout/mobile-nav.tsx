@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { LayoutDashboard, DoorClosed, Users, Zap, Receipt, FileSpreadsheet, CreditCard, Sparkles, UserPlus, User, Wallet, Target } from "lucide-react";
+import { LayoutDashboard, DoorClosed, Users, Zap, Receipt, FileSpreadsheet, CreditCard, UserPlus, User, Wallet, Target, Building2, Layers } from "lucide-react";
 import { UserRole } from "@/types";
 import { hasPermission } from "@/lib/permissions";
 
@@ -14,15 +14,16 @@ interface MobileNavProps {
 export function MobileNav({ currentRole, activeTab, onTabChange }: MobileNavProps) {
   const allMobileItems = [
     { id: "owner-dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { id: "ai-assistant", label: "AI Bot ✨", icon: Sparkles },
     { id: "cashflow", label: "Kas", icon: Wallet },
     { id: "staff-management", label: "Karyawan", icon: UserPlus },
     { id: "rooms", label: "Kamar", icon: DoorClosed },
+    { id: "room-types", label: "Tipe", icon: Layers },
     { id: "tenants", label: "Penghuni", icon: Users },
     { id: "leads", label: "Leads", icon: Target },
     { id: "electricity", label: "Token", icon: Zap },
     { id: "billing", label: "Tagihan", icon: Receipt },
     { id: "owner-audit", label: "Laporan", icon: FileSpreadsheet },
+    { id: "property-settings", label: "Properti", icon: Building2 },
     { id: "profile", label: "Profil", icon: User },
   ];
 

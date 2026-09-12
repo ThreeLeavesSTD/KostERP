@@ -49,7 +49,7 @@ export function Header({ currentRole, activeTab, onTabChange, onLogout }: Header
     ? "Admin"
     : "Staff";
 
-  useEffect(() => {
+  const fetchPropertyInfo = () => {
     KostApiClient.getProperties()
       .then((props) => {
         if (props.length > 0) {
@@ -60,30 +60,30 @@ export function Header({ currentRole, activeTab, onTabChange, onLogout }: Header
         }
       })
       .catch(() => {});
-  }, []);
+  };
+
+  useEffect(() => {
+    fetchPropertyInfo();
+
+    const handleStorageChange = (e: any) => {
+      if (!e.detail?.key || e.detail.key === "kost_erp_properties") {
+        fetchPropertyInfo();
+      }
+    };
+
+    window.addEventListener("kost_storage_change", handleStorageChange);
+    return () => {
+      window.removeEventListener("kost_storage_change", handleStorageChange);
+    };
+  }, [activeTab]);
 
   return (
     <header className="sticky top-0 z-30 flex h-20 w-full items-center justify-between px-4 sm:px-8 py-3 bg-[#EDEDED]/90 dark:bg-[#0A0A0A]/90 backdrop-blur-md gap-2 sm:gap-4">
-      {/* Left: Brand Monogram & Property Information */}
-      <div className="flex items-center gap-3 shrink-0">
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#0A0A0A] text-white shadow-sm dark:bg-white dark:text-[#0A0A0A] transition-transform hover:scale-105">
-          <svg className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-          </svg>
-        </div>
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-sm font-black tracking-tight text-neutral-900 dark:text-white whitespace-nowrap">
-              {propertyName}
-            </h1>
-            <span className="rounded-full bg-[#D9FF43] px-2 py-0.5 text-[10px] font-black text-[#0A0A0A]">
-              ERP 2.0
-            </span>
-          </div>
-          <p className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
-            Sistem Operasional & Token Listrik
-          </p>
-        </div>
+      {/* Left: Property Name */}
+      <div className="flex items-center shrink-0">
+        <h1 className="text-base sm:text-xl font-black tracking-tight text-neutral-900 dark:text-white whitespace-nowrap">
+          {propertyName}
+        </h1>
       </div>
 
       {/* Right: Location, Notification Center Popover & User Profile */}

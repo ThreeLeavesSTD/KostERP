@@ -7,15 +7,14 @@ import {
   Users,
   Zap,
   Receipt,
-  CreditCard,
   Building2,
   FileSpreadsheet,
   Settings,
-  Sparkles,
   UserPlus,
   User,
   Wallet,
   Target,
+  Layers,
 } from "lucide-react";
 import { UserRole } from "@/types";
 import { hasPermission } from "@/lib/permissions";
@@ -29,17 +28,26 @@ interface SidebarProps {
 
 export function Sidebar({ currentRole, activeTab, onTabChange }: SidebarProps) {
   const { profile } = useAuth();
+  const [hoveredTooltip, setHoveredTooltip] = React.useState<{
+    label: string;
+    top: number;
+  } | null>(null);
+
+  React.useEffect(() => {
+    const handleDismissTooltip = () => setHoveredTooltip(null);
+    window.addEventListener("scroll", handleDismissTooltip, { passive: true });
+    window.addEventListener("resize", handleDismissTooltip, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", handleDismissTooltip);
+      window.removeEventListener("resize", handleDismissTooltip);
+    };
+  }, []);
+
   const allNavItems = [
     {
       id: "owner-dashboard",
       label: "Dashboard Owner",
       icon: LayoutDashboard,
-    },
-    {
-      id: "ai-assistant",
-      label: "AI Assistant Concierge",
-      icon: Sparkles,
-      badge: "AI",
     },
     {
       id: "cashflow",
@@ -55,6 +63,11 @@ export function Sidebar({ currentRole, activeTab, onTabChange }: SidebarProps) {
       id: "rooms",
       label: "Manajemen Kamar",
       icon: DoorClosed,
+    },
+    {
+      id: "room-types",
+      label: "Tipe & Showcase",
+      icon: Layers,
     },
     {
       id: "tenants",
@@ -83,9 +96,9 @@ export function Sidebar({ currentRole, activeTab, onTabChange }: SidebarProps) {
       icon: FileSpreadsheet,
     },
     {
-      id: "billing-settings",
-      label: "Rekening Bank",
-      icon: CreditCard,
+      id: "property-settings",
+      label: "Pengaturan Properti",
+      icon: Building2,
     },
     {
       id: "profile",
@@ -99,53 +112,79 @@ export function Sidebar({ currentRole, activeTab, onTabChange }: SidebarProps) {
   );
 
   return (
-    <aside className="hidden md:flex flex-col items-center fixed left-4 sm:left-6 top-24 z-30">
+    <aside className="hidden md:flex flex-col items-center fixed left-3 sm:left-5 top-20 md:top-[84px] bottom-3 sm:bottom-4 z-30 pointer-events-none">
       {/* Floating Slim Dock Container */}
-      <div className="flex flex-col items-center gap-2.5 w-16 p-2.5 rounded-3xl bg-white/90 dark:bg-[#18181B]/90 backdrop-blur-xl border border-white/80 dark:border-white/10 shadow-spatial">
+      <div className="pointer-events-auto flex flex-col items-center gap-1.5 w-14 sm:w-[58px] p-1.5 sm:p-2 rounded-3xl bg-white/90 dark:bg-[#18181B]/90 backdrop-blur-xl border border-white/80 dark:border-white/10 shadow-spatial max-h-full overflow-hidden">
         {/* Navigation Icons List */}
-        <nav className="flex flex-col items-center gap-2 w-full">
+        <nav
+          onScroll={() => setHoveredTooltip(null)}
+          className="flex flex-col items-center gap-1 sm:gap-1.5 w-full overflow-y-auto hide-scrollbar py-0.5"
+        >
           {visibleItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
-              <div key={item.id} className="relative group flex items-center justify-center">
-                <button
-                  onClick={() => onTabChange(item.id)}
-                  title={item.label}
-                  className={`relative flex h-11 w-11 items-center justify-center rounded-2xl transition-all duration-200 ${
-                    isActive
-                      ? "bg-[#0A0A0A] text-white shadow-spatial scale-105 dark:bg-white dark:text-[#0A0A0A]"
-                      : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:text-white dark:hover:bg-neutral-800"
-                  }`}
-                >
-                  <Icon className="h-5 w-5" />
-                  {item.badge && (
-                    <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#D9FF43] text-[9px] font-black text-[#0A0A0A] ring-2 ring-white dark:ring-neutral-900">
-                      ⚡
-                    </span>
-                  )}
-                </button>
-
-                {/* Floating Tooltip */}
-                <div className="pointer-events-none absolute left-16 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-all duration-200 z-50 whitespace-nowrap rounded-xl bg-[#0A0A0A] px-3 py-1.5 text-xs font-bold text-white shadow-xl dark:bg-white dark:text-[#0A0A0A]">
-                  {item.label}
-                </div>
-              </div>
+              <button
+                key={item.id}
+                onClick={() => {
+                  setHoveredTooltip(null);
+                  onTabChange(item.id);
+                }}
+                onMouseEnter={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setHoveredTooltip({
+                    label: item.label,
+                    top: rect.top + rect.height / 2,
+                  });
+                }}
+                onMouseLeave={() => setHoveredTooltip(null)}
+                title={item.label}
+                className={`relative flex h-[38px] w-[38px] sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-2xl transition-all duration-200 ${
+                  isActive
+                    ? "bg-[#0A0A0A] text-white shadow-spatial scale-105 dark:bg-white dark:text-[#0A0A0A]"
+                    : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:text-white dark:hover:bg-neutral-800"
+                }`}
+              >
+                <Icon className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
+                {item.badge && (
+                  <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5 sm:h-4 sm:w-4 items-center justify-center rounded-full bg-[#D9FF43] text-[8px] sm:text-[9px] font-black text-[#0A0A0A] ring-2 ring-white dark:ring-neutral-900">
+                    ⚡
+                  </span>
+                )}
+              </button>
             );
           })}
         </nav>
 
         {/* Divider */}
-        <div className="w-8 h-px bg-neutral-200 dark:bg-neutral-800 my-0.5" />
+        <div className="w-6 sm:w-7 shrink-0 h-px bg-neutral-200 dark:bg-neutral-800 my-0.5" />
 
         {/* Bottom Status Indicator */}
         <div
-          title="n8n WhatsApp Webhook Active"
-          className="flex h-9 w-9 items-center justify-center rounded-2xl bg-[#D9FF43]/20 text-[#0A0A0A] dark:text-[#D9FF43] transition-transform hover:scale-105"
+          onMouseEnter={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            setHoveredTooltip({
+              label: "n8n WhatsApp Webhook Aktif",
+              top: rect.top + rect.height / 2,
+            });
+          }}
+          onMouseLeave={() => setHoveredTooltip(null)}
+          title="n8n WhatsApp Webhook Aktif"
+          className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-xl bg-[#D9FF43]/20 text-[#0A0A0A] dark:text-[#D9FF43] transition-transform hover:scale-105 cursor-default"
         >
-          <span className="h-2.5 w-2.5 rounded-full bg-[#D9FF43] animate-pulse ring-2 ring-[#D9FF43]/50" />
+          <span className="h-2 w-2 rounded-full bg-[#D9FF43] animate-pulse ring-2 ring-[#D9FF43]/50" />
         </div>
       </div>
+
+      {/* Floating Tooltip outside overflow container to prevent clipping */}
+      {hoveredTooltip && (
+        <div
+          style={{ top: `${hoveredTooltip.top}px` }}
+          className="pointer-events-none fixed left-[72px] sm:left-[84px] -translate-y-1/2 z-50 whitespace-nowrap rounded-xl bg-[#0A0A0A] px-3 py-1.5 text-xs font-bold text-white shadow-xl dark:bg-white dark:text-[#0A0A0A] animate-in fade-in duration-150"
+        >
+          {hoveredTooltip.label}
+        </div>
+      )}
     </aside>
   );
 }

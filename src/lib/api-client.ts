@@ -1,6 +1,7 @@
 import {
   Property,
   Room,
+  RoomType,
   Tenant,
   Lease,
   Invoice,
@@ -104,8 +105,8 @@ export const KostApiClient = {
   },
 
   async updateProperty(id: string, property: Partial<Property>): Promise<Property> {
-    const local = KostStorage.getProperties()[0] || (property as Property);
-    fetchWithFallback(`/properties/${id}`, () => local, {
+    const local = KostStorage.updateProperty(id, property);
+    await fetchWithFallback<Property>(`/properties/${id}`, () => local, {
       method: "PUT",
       body: JSON.stringify(property),
     });
@@ -114,6 +115,40 @@ export const KostApiClient = {
 
   async deleteProperty(id: string): Promise<{ success: boolean }> {
     fetchWithFallback(`/properties/${id}`, () => ({ success: true }), {
+      method: "DELETE",
+    });
+    return { success: true };
+  },
+
+  // Room Types (Kategori & Showcase Kamar)
+  async getRoomTypes(propertyId?: string): Promise<RoomType[]> {
+    const query = propertyId ? `?property_id=${propertyId}` : "";
+    return fetchWithFallback<RoomType[]>(`/room-types${query}`, () =>
+      KostStorage.getRoomTypes()
+    );
+  },
+
+  async createRoomType(roomType: Partial<RoomType>): Promise<RoomType> {
+    const local = KostStorage.addRoomType(roomType as any);
+    fetchWithFallback("/room-types", () => local, {
+      method: "POST",
+      body: JSON.stringify(roomType),
+    });
+    return local;
+  },
+
+  async updateRoomType(id: string, roomType: Partial<RoomType>): Promise<RoomType> {
+    const local = KostStorage.updateRoomType(id, roomType) || (roomType as RoomType);
+    fetchWithFallback(`/room-types/${id}`, () => local, {
+      method: "PUT",
+      body: JSON.stringify(roomType),
+    });
+    return local;
+  },
+
+  async deleteRoomType(id: string): Promise<{ success: boolean }> {
+    KostStorage.deleteRoomType(id);
+    fetchWithFallback(`/room-types/${id}`, () => ({ success: true }), {
       method: "DELETE",
     });
     return { success: true };
@@ -559,7 +594,7 @@ export const KostApiClient = {
         description: "Pemilik properti dengan akses penuh ke seluruh fitur dan finansial",
         badge_color: "lime",
         is_system: true,
-        permissions: ["owner-dashboard", "ai-assistant", "cashflow", "rooms", "tenants", "electricity", "billing", "owner-audit", "billing-settings", "staff-management", "profile"],
+        permissions: ["owner-dashboard", "ai-assistant", "cashflow", "rooms", "tenants", "electricity", "billing", "owner-audit", "staff-management", "profile"],
       },
       {
         id: "admin",
@@ -567,7 +602,7 @@ export const KostApiClient = {
         description: "Operasional kamar, data penghuni, penagihan invoice, dan catat transaksi kas",
         badge_color: "info",
         is_system: true,
-        permissions: ["owner-dashboard", "ai-assistant", "cashflow", "rooms", "tenants", "electricity", "billing", "owner-audit", "billing-settings", "profile"],
+        permissions: ["owner-dashboard", "ai-assistant", "cashflow", "rooms", "tenants", "electricity", "billing", "owner-audit", "profile"],
       },
       {
         id: "cleaning_staff",
@@ -637,27 +672,40 @@ export const KostApiClient = {
   // Leads & Surveys
   async getLeads(propertyId?: string): Promise<Lead[]> {
     const query = propertyId ? `?propertyId=${propertyId}` : "";
-    return fetchWithFallback<Lead[]>(`/leads${query}`, () => []);
+    return fetchWithFallback<Lead[]>(`/leads${query}`, () =>
+      KostStorage.getLeads(propertyId)
+    );
   },
 
   async createLead(payload: Partial<Lead>): Promise<Lead> {
-    return fetchWithFallback<Lead>("/leads", () => payload as Lead, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
+    return fetchWithFallback<Lead>(
+      "/leads",
+      () => KostStorage.createLead(payload),
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
   },
 
   async updateLead(id: string, payload: Partial<Lead>): Promise<Lead> {
-    return fetchWithFallback<Lead>(`/leads/${id}`, () => payload as Lead, {
-      method: "PUT",
-      body: JSON.stringify(payload),
-    });
+    return fetchWithFallback<Lead>(
+      `/leads/${id}`,
+      () => KostStorage.updateLead(id, payload),
+      {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      }
+    );
   },
 
   async deleteLead(id: string): Promise<{ success: boolean }> {
     return fetchWithFallback<{ success: boolean }>(
       `/leads/${id}`,
-      () => ({ success: true }),
+      () => {
+        KostStorage.deleteLead(id);
+        return { success: true };
+      },
       {
         method: "DELETE",
       }
@@ -666,27 +714,40 @@ export const KostApiClient = {
 
   async getSurveys(propertyId?: string): Promise<SurveySchedule[]> {
     const query = propertyId ? `?propertyId=${propertyId}` : "";
-    return fetchWithFallback<SurveySchedule[]>(`/surveys${query}`, () => []);
+    return fetchWithFallback<SurveySchedule[]>(`/surveys${query}`, () =>
+      KostStorage.getSurveys(propertyId)
+    );
   },
 
   async createSurvey(payload: Partial<SurveySchedule>): Promise<SurveySchedule> {
-    return fetchWithFallback<SurveySchedule>("/surveys", () => payload as SurveySchedule, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
+    return fetchWithFallback<SurveySchedule>(
+      "/surveys",
+      () => KostStorage.createSurvey(payload),
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
   },
 
   async updateSurvey(id: string, payload: Partial<SurveySchedule>): Promise<SurveySchedule> {
-    return fetchWithFallback<SurveySchedule>(`/surveys/${id}`, () => payload as SurveySchedule, {
-      method: "PUT",
-      body: JSON.stringify(payload),
-    });
+    return fetchWithFallback<SurveySchedule>(
+      `/surveys/${id}`,
+      () => KostStorage.updateSurvey(id, payload),
+      {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      }
+    );
   },
 
   async deleteSurvey(id: string): Promise<{ success: boolean }> {
     return fetchWithFallback<{ success: boolean }>(
       `/surveys/${id}`,
-      () => ({ success: true }),
+      () => {
+        KostStorage.deleteSurvey(id);
+        return { success: true };
+      },
       {
         method: "DELETE",
       }

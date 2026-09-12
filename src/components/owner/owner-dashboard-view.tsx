@@ -68,8 +68,12 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
   const [tenants, setTenants] = useState<Tenant[]>(() => KostStorage.getTenants());
   const [cashTransactions, setCashTransactions] = useState<CashTransaction[]>(() => KostStorage.getCashTransactions());
   const [electricityTransactions, setElectricityTransactions] = useState<ElectricityTransaction[]>(() => KostStorage.getElectricityTransactions());
-  const [promptInput, setPromptInput] = useState("");
-  const [isPromptSending, setIsPromptSending] = useState(false);
+  const [propertyInfo, setPropertyInfo] = useState<{ name: string; address?: string; city?: string }>(() => {
+    const props = KostStorage.getProperties();
+    return props.length > 0
+      ? { name: props[0].name, address: props[0].address, city: props[0].city }
+      : { name: "Kost Putri Graha Asri", address: "Margonda, Depok" };
+  });
   const [isLoading, setIsLoading] = useState(false);
 
   // Timeframe selector for charts
@@ -85,6 +89,7 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
     const tLocal = KostStorage.getTenants();
     const cashLocal = KostStorage.getCashTransactions();
     const elecLocal = KostStorage.getElectricityTransactions();
+    const propsLocal = KostStorage.getProperties();
 
     setMetrics(mLocal);
     setRooms(rLocal);
@@ -93,10 +98,17 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
     setTenants(tLocal);
     setCashTransactions(cashLocal);
     setElectricityTransactions(elecLocal);
+    if (propsLocal.length > 0) {
+      setPropertyInfo({
+        name: propsLocal[0].name,
+        address: propsLocal[0].address,
+        city: propsLocal[0].city,
+      });
+    }
 
     // 2. Fetch from backend API if available
     try {
-      const [m, r, l, inv, t, cash, elec] = await Promise.all([
+      const [m, r, l, inv, t, cash, elec, props] = await Promise.all([
         KostApiClient.getDashboardSummary().catch(() => null),
         KostApiClient.getRooms().catch(() => null),
         KostApiClient.getLeases().catch(() => null),
@@ -104,6 +116,7 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
         KostApiClient.getTenants().catch(() => null),
         KostApiClient.getCashTransactions().catch(() => null),
         KostApiClient.getElectricityTransactions().catch(() => null),
+        KostApiClient.getProperties().catch(() => null),
       ]);
       if (m) setMetrics(m);
       if (r && r.length > 0) setRooms(r);
@@ -112,6 +125,13 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
       if (t && t.length > 0) setTenants(t);
       if (cash && cash.length > 0) setCashTransactions(cash);
       if (elec && elec.length > 0) setElectricityTransactions(elec);
+      if (props && props.length > 0) {
+        setPropertyInfo({
+          name: props[0].name,
+          address: props[0].address,
+          city: props[0].city,
+        });
+      }
     } catch {
       // Backend not running; local storage state is active
     }
@@ -352,14 +372,6 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
     XLSX.writeFile(wb, `Laporan_Kost_ERP_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
-  const handleQuickAssistant = () => {
-    const query = promptInput.trim();
-    setPromptInput("");
-    if (onNavigateTab) {
-      onNavigateTab("ai-assistant", query || undefined);
-    }
-  };
-
   return (
     <div className="space-y-6">
       {/* Top Header & Export Controls */}
@@ -396,182 +408,106 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
         </div>
       </div>
 
-      {/* Hero Showcase Bento & Assistant Column Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Left 8 Cols: Flagship Hero Showcase Bento Card */}
-        <div className="lg:col-span-8 relative overflow-hidden rounded-3xl p-7 sm:p-9 bento-hero shadow-spatial border border-white/60 dark:border-white/10 flex flex-col justify-between min-h-[360px]">
-          {/* Top Badges */}
-          <div className="flex items-center gap-2">
-            <span className="glass-pill px-3.5 py-1 text-xs font-bold text-neutral-900 dark:text-white rounded-full">
-              Bulan Berjalan · Q1 2026
-            </span>
-            <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400">
-              Kost ERP Pro Analytics
-            </span>
-          </div>
+      {/* Flagship Hero Showcase Bento Card */}
+      <div className="relative overflow-hidden rounded-3xl p-7 sm:p-9 bento-hero shadow-spatial border border-white/60 dark:border-white/10 flex flex-col justify-between min-h-[340px]">
+        {/* Top Badges */}
+        <div className="flex items-center gap-2">
+          <span className="glass-pill px-3.5 py-1 text-xs font-bold text-neutral-900 dark:text-white rounded-full">
+            Bulan Berjalan · Q1 2026
+          </span>
+          <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400">
+            Kost ERP Pro Analytics
+          </span>
+        </div>
 
-          {/* Large Title & Subtitle */}
-          <div className="my-5">
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-neutral-900 dark:text-white">
-              Kost Putri Graha Asri
-            </h1>
-            <p className="text-sm font-medium text-neutral-600 dark:text-neutral-400 mt-1 max-w-lg">
-              Operasional Properti Tunggal · {metrics.totalRooms} Unit Kamar Total · Smart WA Webhook
-            </p>
-          </div>
+        {/* Large Title & Subtitle */}
+        <div className="my-5">
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-neutral-900 dark:text-white">
+            {propertyInfo.name}
+          </h1>
+          <p className="text-sm font-medium text-neutral-600 dark:text-neutral-400 mt-1 max-w-xl">
+            Operasional Properti{propertyInfo.city ? ` · ${propertyInfo.city}` : propertyInfo.address ? ` · ${propertyInfo.address.split(",")[0]}` : ""} · {metrics.totalRooms} Unit Kamar Total · Smart WA Webhook
+          </p>
+        </div>
 
-          {/* Overlapping Translucent Frosted Glass Metric Badges */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 my-3">
-            {/* Metric 1: Okupansi */}
-            <div className="glass-pill rounded-2xl p-3.5 flex items-center gap-3 transition-transform hover:scale-[1.02]">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#D9FF43] text-[#0A0A0A] shadow-xs">
-                <Building2 className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                  Tingkat Okupansi
-                </p>
-                <p className="text-lg font-black text-neutral-900 dark:text-white leading-tight">
-                  {metrics.occupancyRate}% ({metrics.occupiedRooms}/{metrics.totalRooms} Unit)
-                </p>
-              </div>
+        {/* Overlapping Translucent Frosted Glass Metric Badges */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-3">
+          {/* Metric 1: Okupansi */}
+          <div className="glass-pill rounded-2xl p-3.5 flex items-center gap-3 transition-transform hover:scale-[1.02]">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#D9FF43] text-[#0A0A0A] shadow-xs">
+              <Building2 className="h-5 w-5" />
             </div>
-
-            {/* Metric 2: Revenue */}
-            <div className="glass-pill rounded-2xl p-3.5 flex items-center gap-3 transition-transform hover:scale-[1.02]">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#0A0A0A] text-white shadow-xs dark:bg-white dark:text-[#0A0A0A]">
-                <DollarSign className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                  Penerimaan Sewa Terverifikasi
-                </p>
-                <p className="text-lg font-black text-neutral-900 dark:text-white leading-tight">
-                  {formatRupiah(metrics.currentMonthRevenue)}
-                </p>
-              </div>
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+                Tingkat Okupansi
+              </p>
+              <p className="text-lg font-black text-neutral-900 dark:text-white leading-tight">
+                {metrics.occupancyRate}% ({metrics.occupiedRooms}/{metrics.totalRooms} Unit)
+              </p>
             </div>
           </div>
 
-          {/* Bottom Card Footer */}
-          <div className="mt-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-3 border-t border-neutral-300/40 dark:border-white/10">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center -space-x-1.5">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#D9FF43] text-[10px] font-bold text-neutral-900 ring-2 ring-white">
-                  {metrics.availableRooms}
-                </span>
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#0A0A0A] text-[10px] font-bold text-white ring-2 ring-white">
-                  {metrics.occupiedRooms}
-                </span>
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white ring-2 ring-white">
-                  {metrics.maintenanceRooms}
-                </span>
-              </div>
-              <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
-                {metrics.availableRooms} Kamar Siap Huni · Status Terhubung
-              </span>
+          {/* Metric 2: Revenue */}
+          <div className="glass-pill rounded-2xl p-3.5 flex items-center gap-3 transition-transform hover:scale-[1.02]">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#0A0A0A] text-white shadow-xs dark:bg-white dark:text-[#0A0A0A]">
+              <DollarSign className="h-5 w-5" />
             </div>
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+                Penerimaan Sewa Terverifikasi
+              </p>
+              <p className="text-lg font-black text-neutral-900 dark:text-white leading-tight">
+                {formatRupiah(metrics.currentMonthRevenue)}
+              </p>
+            </div>
+          </div>
 
-            <Button
-              variant="default"
-              onClick={() => onNavigateTab && onNavigateTab("rooms")}
-              className="gap-2 shadow-md hover:scale-105"
-            >
-              <span>Inventaris Kamar</span>
-              <ArrowUpRight className="h-4 w-4" />
-            </Button>
+          {/* Metric 3: Total Tunggakan */}
+          <div
+            onClick={() => onNavigateTab && onNavigateTab("billing")}
+            className="glass-pill rounded-2xl p-3.5 flex items-center gap-3 transition-transform hover:scale-[1.02] cursor-pointer"
+          >
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-500/20 text-rose-600 dark:text-rose-400 shadow-xs">
+              <AlertCircle className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+                Total Tunggakan Sewa
+              </p>
+              <p className="text-lg font-black text-rose-600 dark:text-rose-400 leading-tight">
+                {formatRupiah(metrics.totalUnpaidAmount)}
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* Right 4 Cols: Concierge & Piutang Hub */}
-        <div className="lg:col-span-4 flex flex-col gap-4">
-          {/* Top Concierge Capsule */}
-          <div
-            onClick={() => onNavigateTab && onNavigateTab("ai-assistant")}
-            className="rounded-3xl bg-white p-5 shadow-spatial border border-white/80 dark:bg-[#18181B] dark:border-white/10 flex items-center justify-between cursor-pointer hover:shadow-spatial-lg transition-all group"
+        {/* Bottom Card Footer */}
+        <div className="mt-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-3 border-t border-neutral-300/40 dark:border-white/10">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center -space-x-1.5">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#D9FF43] text-[10px] font-bold text-neutral-900 ring-2 ring-white">
+                {metrics.availableRooms}
+              </span>
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#0A0A0A] text-[10px] font-bold text-white ring-2 ring-white">
+                {metrics.occupiedRooms}
+              </span>
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white ring-2 ring-white">
+                {metrics.maintenanceRooms}
+              </span>
+            </div>
+            <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+              {metrics.availableRooms} Kamar Siap Huni · Status Terhubung
+            </span>
+          </div>
+
+          <Button
+            variant="default"
+            onClick={() => onNavigateTab && onNavigateTab("rooms")}
+            className="gap-2 shadow-md hover:scale-105"
           >
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 group-hover:bg-[#D9FF43] group-hover:text-[#0A0A0A] transition-colors">
-                <Sparkles className="h-5 w-5" />
-              </div>
-              <div>
-                <h4 className="text-xs font-bold text-neutral-900 dark:text-white flex items-center gap-1">
-                  <span>Kost Concierge AI</span>
-                  <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </h4>
-                <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
-                  Buka percakapan & otomasi Chatbot AI ↗
-                </p>
-              </div>
-            </div>
-            <span className="h-2.5 w-2.5 rounded-full bg-[#D9FF43] animate-ping" />
-          </div>
-
-          {/* Dark High-Contrast Bento Card (Total Tunggakan) */}
-          <div className="rounded-3xl bg-[#0A0A0A] p-5 shadow-spatial text-white border border-neutral-800 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Lightbulb className="h-4 w-4 text-[#D9FF43]" />
-                <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">
-                  Total Tunggakan
-                </span>
-              </div>
-              <span className="rounded-full bg-rose-500/20 px-2.5 py-0.5 text-[10px] font-bold text-rose-300">
-                {metrics.unpaidInvoicesCount} Invoice
-              </span>
-            </div>
-
-            <div className="my-3">
-              <h3 className="text-2xl font-black tracking-tight text-white">
-                {formatRupiah(metrics.totalUnpaidAmount)}
-              </h3>
-              <p className="text-xs text-neutral-400 mt-0.5">
-                Tagihan sewa tertunda · Perlu reminder WhatsApp
-              </p>
-            </div>
-
-            <button
-              onClick={() => onNavigateTab && onNavigateTab("billing")}
-              className="mt-1 flex items-center justify-between rounded-full bg-white/10 hover:bg-white/20 px-4 py-2.5 text-xs font-bold text-white transition-all"
-            >
-              <span>Kirim Pengingat Tagihan ⚡</span>
-              <ArrowRight className="h-3.5 w-3.5" />
-            </button>
-          </div>
-
-          {/* Quick Assistant AI Prompt Bar */}
-          <div className="rounded-3xl bg-white p-4 shadow-spatial border border-white/80 dark:bg-[#18181B] dark:border-white/10 flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
-                Quick Assistant
-              </span>
-              <span className="text-[10px] font-semibold text-neutral-500">n8n Connected</span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <input
-                  type="text"
-                  placeholder="Ketik perintah atau reminder sewa..."
-                  value={promptInput}
-                  onChange={(e) => setPromptInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleQuickAssistant()}
-                  className="w-full rounded-full border border-neutral-200 bg-neutral-50 px-4 py-2 text-xs font-medium focus:ring-2 focus:ring-[#0A0A0A] focus:outline-none dark:bg-neutral-800 dark:border-neutral-700 dark:text-white"
-                />
-              </div>
-
-              <Button
-                variant="lime"
-                size="sm"
-                onClick={handleQuickAssistant}
-                disabled={isPromptSending}
-                className="px-4 font-bold text-xs gap-1 shadow-lime-glow"
-              >
-                <span>{isPromptSending ? "..." : "Ask"}</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          </div>
+            <span>Inventaris Kamar</span>
+            <ArrowUpRight className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 

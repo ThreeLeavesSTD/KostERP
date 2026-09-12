@@ -489,7 +489,9 @@ export type Database = {
         Row: {
           address: string
           city: string | null
+          cover_image: string | null
           created_at: string | null
+          description: string | null
           id: string
           name: string
           phone: string | null
@@ -498,7 +500,9 @@ export type Database = {
         Insert: {
           address: string
           city?: string | null
+          cover_image?: string | null
           created_at?: string | null
+          description?: string | null
           id?: string
           name: string
           phone?: string | null
@@ -507,7 +511,9 @@ export type Database = {
         Update: {
           address?: string
           city?: string | null
+          cover_image?: string | null
           created_at?: string | null
+          description?: string | null
           id?: string
           name?: string
           phone?: string | null
@@ -603,43 +609,108 @@ export type Database = {
           },
         ]
       }
+      room_types: {
+        Row: {
+          base_price: number
+          created_at: string | null
+          description: string | null
+          display_order: number | null
+          facilities: string[] | null
+          id: string
+          is_active: boolean | null
+          name: string
+          photos: string[] | null
+          property_id: string
+          room_size: string | null
+          slug: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          base_price?: number
+          created_at?: string | null
+          description?: string | null
+          display_order?: number | null
+          facilities?: string[] | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          photos?: string[] | null
+          property_id: string
+          room_size?: string | null
+          slug?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          base_price?: number
+          created_at?: string | null
+          description?: string | null
+          display_order?: number | null
+          facilities?: string[] | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          photos?: string[] | null
+          property_id?: string
+          room_size?: string | null
+          slug?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_types_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rooms: {
         Row: {
           base_price: number
           created_at: string | null
+          description: string | null
           facilities: string[] | null
           floor: number
           id: string
           notes: string | null
+          photos: string[] | null
           property_id: string
           room_number: string
           room_type: string | null
+          room_type_id: string | null
           status: Database["public"]["Enums"]["room_status"]
           updated_at: string | null
         }
         Insert: {
           base_price?: number
           created_at?: string | null
+          description?: string | null
           facilities?: string[] | null
           floor?: number
           id?: string
           notes?: string | null
+          photos?: string[] | null
           property_id: string
           room_number: string
           room_type?: string | null
+          room_type_id?: string | null
           status?: Database["public"]["Enums"]["room_status"]
           updated_at?: string | null
         }
         Update: {
           base_price?: number
           created_at?: string | null
+          description?: string | null
           facilities?: string[] | null
           floor?: number
           id?: string
           notes?: string | null
+          photos?: string[] | null
           property_id?: string
           room_number?: string
           room_type?: string | null
+          room_type_id?: string | null
           status?: Database["public"]["Enums"]["room_status"]
           updated_at?: string | null
         }

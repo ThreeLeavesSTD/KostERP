@@ -40,12 +40,54 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function getInitialAuth() {
+  if (typeof window === "undefined") {
+    return { user: null, session: null, profile: null, role: "owner" as UserRole };
+  }
+  try {
+    const savedUser = localStorage.getItem("kost_local_auth_user");
+    const savedProfile = localStorage.getItem("kost_local_auth_profile");
+    if (savedUser && savedProfile) {
+      const u = JSON.parse(savedUser);
+      const p = JSON.parse(savedProfile);
+      return { user: u, session: null, profile: p, role: (p.role || "owner") as UserRole };
+    }
+
+    // Cek apakah ada sesi Supabase tersimpan di localStorage
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith("sb-") && key.endsWith("-auth-token")) {
+        const item = localStorage.getItem(key);
+        if (item) {
+          const parsed = JSON.parse(item);
+          const sbUser = parsed?.user;
+          if (sbUser) {
+            const metaRole = (sbUser.user_metadata?.role as UserRole) || "owner";
+            const prof: UserProfile = {
+              id: sbUser.id,
+              full_name: sbUser.user_metadata?.full_name || sbUser.email || "Owner",
+              role: metaRole,
+              property_id: null,
+              login_id: sbUser.user_metadata?.login_id || null,
+              email: sbUser.email || null,
+              phone_number: sbUser.phone || null,
+            };
+            return { user: sbUser, session: parsed, profile: prof, role: metaRole };
+          }
+        }
+      }
+    }
+  } catch {}
+  return { user: null, session: null, profile: null, role: "owner" as UserRole };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [role, setRole] = useState<UserRole>("admin");
-  const [isLoading, setIsLoading] = useState(true);
+  const initial = getInitialAuth();
+  const [user, setUser] = useState<User | null>(initial.user);
+  const [session, setSession] = useState<Session | null>(initial.session);
+  const [profile, setProfile] = useState<UserProfile | null>(initial.profile);
+  const [role, setRole] = useState<UserRole>(initial.role);
+  const [isLoading, setIsLoading] = useState(false);
 
   const supabase = createClient();
   const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000/api";

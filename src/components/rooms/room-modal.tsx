@@ -1,13 +1,15 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { User, Phone, ShieldCheck, UserCheck, Key, Calendar } from "lucide-react";
+import { User, Phone, ShieldCheck, UserCheck, Key, Calendar, Globe, Layers, Info } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
-import { Room, RoomStatus, Tenant } from "@/types";
+import { Room, RoomStatus, RoomType, Tenant } from "@/types";
 import { KostApiClient } from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
 import { notify } from "@/lib/notify";
+import { createClient } from "@/lib/supabase/client";
+import { formatRupiah } from "@/lib/utils";
 
 interface RoomModalProps {
   isOpen: boolean;
@@ -41,6 +43,12 @@ export function RoomModal({ isOpen, onClose, roomToEdit, onSuccess }: RoomModalP
     "Kasur Springbed",
   ]);
   const [notes, setNotes] = useState("");
+  const [description, setDescription] = useState("");
+  const [photos, setPhotos] = useState<string[]>([]);
+
+  const [roomTypes, setRoomTypes] = useState<RoomType[]>([]);
+  const [selectedRoomTypeId, setSelectedRoomTypeId] = useState<string>("");
+  const [isCustomType, setIsCustomType] = useState(false);
 
   // Relational Tenant Connection (Primary Key: Tenant.id)
   const [tenantsList, setTenantsList] = useState<Tenant[]>([]);
@@ -49,38 +57,80 @@ export function RoomModal({ isOpen, onClose, roomToEdit, onSuccess }: RoomModalP
 
   useEffect(() => {
     let isMounted = true;
-    KostApiClient.getTenants()
-      .then((data) => {
-        if (isMounted) setTenantsList(data);
-      })
-      .catch((err) => console.error("Gagal memuat daftar tenant:", err));
 
-    if (roomToEdit) {
-      setRoomNumber(roomToEdit.room_number);
-      setFloor(roomToEdit.floor);
-      setRoomType(roomToEdit.room_type || "Standard AC");
-      setBasePrice(roomToEdit.base_price);
-      setStatus(roomToEdit.status);
-      setFacilities(roomToEdit.facilities || []);
-      setNotes(roomToEdit.notes || "");
-      setSelectedTenantId(roomToEdit.tenant_id || roomToEdit.current_tenant?.id || "");
-      setLeaseEndDate(roomToEdit.current_tenant?.end_date || "");
-    } else {
-      setRoomNumber("");
-      setFloor(1);
-      setRoomType("Standard AC");
-      setBasePrice(1500000);
-      setStatus("available");
-      setFacilities(["AC", "Kamar Mandi Dalam", "Kasur Springbed"]);
-      setNotes("");
-      setSelectedTenantId("");
-      setLeaseEndDate("");
-    }
+    Promise.all([
+      KostApiClient.getTenants(),
+      KostApiClient.getRoomTypes(),
+    ])
+      .then(([tenantsData, typesData]) => {
+        if (!isMounted) return;
+        setTenantsList(tenantsData);
+        setRoomTypes(typesData);
+
+        if (roomToEdit) {
+          setRoomNumber(roomToEdit.room_number);
+          setFloor(roomToEdit.floor);
+          setRoomType(roomToEdit.room_type || "Standard AC");
+          setBasePrice(roomToEdit.base_price);
+          setStatus(roomToEdit.status);
+          setFacilities(roomToEdit.facilities || []);
+          setNotes(roomToEdit.notes || "");
+          setDescription(roomToEdit.description || "");
+          setPhotos(roomToEdit.photos || []);
+          setSelectedTenantId(roomToEdit.tenant_id || roomToEdit.current_tenant?.id || "");
+          setLeaseEndDate(roomToEdit.current_tenant?.end_date || "");
+
+          const matchedType = typesData.find(
+            (t) => t.id === roomToEdit.room_type_id || t.name.toLowerCase() === (roomToEdit.room_type || "").toLowerCase()
+          );
+          if (matchedType) {
+            setSelectedRoomTypeId(matchedType.id);
+            setIsCustomType(false);
+          } else if (roomToEdit.room_type) {
+            setIsCustomType(true);
+          }
+        } else {
+          setRoomNumber("");
+          setFloor(1);
+          setStatus("available");
+          setNotes("");
+          setDescription("");
+          setPhotos([]);
+          setSelectedTenantId("");
+          setLeaseEndDate("");
+
+          if (typesData.length > 0) {
+            const first = typesData[0];
+            setSelectedRoomTypeId(first.id);
+            setRoomType(first.name);
+            setBasePrice(first.base_price);
+            setFacilities(first.facilities || ["AC", "Kamar Mandi Dalam", "Kasur Springbed"]);
+            setIsCustomType(false);
+          } else {
+            setRoomType("Standard AC");
+            setBasePrice(1500000);
+            setFacilities(["AC", "Kamar Mandi Dalam", "Kasur Springbed"]);
+          }
+        }
+      })
+      .catch((err) => console.error("Gagal memuat data kamar modal:", err));
 
     return () => {
       isMounted = false;
     };
   }, [roomToEdit, isOpen]);
+
+  const handleRoomTypeSelect = (typeId: string) => {
+    setSelectedRoomTypeId(typeId);
+    const matched = roomTypes.find((rt) => rt.id === typeId);
+    if (matched) {
+      setRoomType(matched.name);
+      setBasePrice(matched.base_price);
+      if (matched.facilities && matched.facilities.length > 0) {
+        setFacilities(matched.facilities);
+      }
+    }
+  };
 
   const toggleFacility = (fac: string) => {
     if (facilities.includes(fac)) {
@@ -120,10 +170,13 @@ export function RoomModal({ isOpen, onClose, roomToEdit, onSuccess }: RoomModalP
           room_number: roomNumber.trim(),
           floor: Number(floor),
           room_type: roomType,
+          room_type_id: selectedRoomTypeId || undefined,
           base_price: Number(basePrice),
           status,
           facilities,
           notes,
+          description,
+          photos,
         });
 
         notify.success("Kamar Diperbarui", `Perubahan data Kamar ${roomNumber.trim()} berhasil disimpan.`);
@@ -132,10 +185,13 @@ export function RoomModal({ isOpen, onClose, roomToEdit, onSuccess }: RoomModalP
           room_number: roomNumber.trim(),
           floor: Number(floor),
           room_type: roomType,
+          room_type_id: selectedRoomTypeId || undefined,
           base_price: Number(basePrice),
           status,
           facilities,
           notes,
+          description,
+          photos,
         });
 
         notify.success("Kamar Ditambahkan", `Kamar ${roomNumber.trim()} berhasil didaftarkan ke sistem.`);
@@ -190,36 +246,111 @@ export function RoomModal({ isOpen, onClose, roomToEdit, onSuccess }: RoomModalP
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-1">
-              Tipe Kamar
-            </label>
-            <select
-              value={roomType}
-              onChange={(e) => setRoomType(e.target.value)}
-              className="w-full rounded-2xl border border-neutral-200/80 bg-neutral-50 px-4 py-2.5 text-xs font-bold text-neutral-900 focus:ring-2 focus:ring-[#0A0A0A] focus:outline-none dark:bg-neutral-800 dark:border-neutral-700 dark:text-white"
-            >
-              <option value="Deluxe AC">Deluxe AC</option>
-              <option value="Standard AC">Standard AC</option>
-              <option value="Standard Non-AC">Standard Non-AC</option>
-              <option value="VIP Balcony AC">VIP Balcony AC</option>
-            </select>
+        {/* Tipe / Kategori Kamar & Tarif */}
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500">
+                  Kategori / Tipe Kamar *
+                </label>
+              </div>
+              <select
+                value={isCustomType ? "__custom__" : (selectedRoomTypeId || "")}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "__custom__") {
+                    setIsCustomType(true);
+                    setSelectedRoomTypeId("");
+                  } else {
+                    setIsCustomType(false);
+                    handleRoomTypeSelect(val);
+                  }
+                }}
+                className="w-full rounded-2xl border border-neutral-200/80 bg-neutral-50 px-4 py-2.5 text-xs font-bold text-neutral-900 focus:ring-2 focus:ring-[#0A0A0A] focus:outline-none dark:bg-neutral-800 dark:border-neutral-700 dark:text-white"
+              >
+                <option value="">-- Pilih Kategori Kamar --</option>
+                {roomTypes.map((rt) => (
+                  <option key={rt.id} value={rt.id}>
+                    {rt.name} {rt.room_size ? `(${rt.room_size})` : ""} - {formatRupiah(rt.base_price)}/bln
+                  </option>
+                ))}
+                <option value="__custom__">+ Input Nama Tipe Kustom...</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-1">
+                Tarif Sewa Bulanan (Rp) *
+              </label>
+              <input
+                type="number"
+                required
+                step={50000}
+                min={100000}
+                value={basePrice}
+                onChange={(e) => setBasePrice(Number(e.target.value))}
+                className="w-full rounded-2xl border border-neutral-200/80 bg-neutral-50 px-4 py-2.5 text-xs font-bold text-neutral-900 focus:ring-2 focus:ring-[#0A0A0A] focus:outline-none dark:bg-neutral-800 dark:border-neutral-700 dark:text-white"
+              />
+            </div>
           </div>
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-1">
-              Tarif Sewa Bulanan (Rp) *
-            </label>
-            <input
-              type="number"
-              required
-              step={50000}
-              min={100000}
-              value={basePrice}
-              onChange={(e) => setBasePrice(Number(e.target.value))}
-              className="w-full rounded-2xl border border-neutral-200/80 bg-neutral-50 px-4 py-2.5 text-xs font-bold text-neutral-900 focus:ring-2 focus:ring-[#0A0A0A] focus:outline-none dark:bg-neutral-800 dark:border-neutral-700 dark:text-white"
-            />
-          </div>
+
+          {isCustomType && (
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-1">
+                Nama Tipe Kamar Kustom *
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="Contoh: Studio Executive"
+                value={roomType}
+                onChange={(e) => setRoomType(e.target.value)}
+                className="w-full rounded-2xl border border-neutral-200/80 bg-neutral-50 px-4 py-2.5 text-xs font-bold text-neutral-900 focus:ring-2 focus:ring-[#0A0A0A] focus:outline-none dark:bg-neutral-800 dark:border-neutral-700 dark:text-white"
+              />
+            </div>
+          )}
+
+          {/* Connected Room Type Showcase Card */}
+          {roomTypes.find((t) => t.id === selectedRoomTypeId || t.name.toLowerCase() === roomType.toLowerCase()) && (() => {
+            const selectedTypeObj = roomTypes.find((t) => t.id === selectedRoomTypeId || t.name.toLowerCase() === roomType.toLowerCase())!;
+            return (
+              <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/20 p-3 text-xs flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  {selectedTypeObj.photos?.[0] ? (
+                    <img
+                      src={selectedTypeObj.photos[0]}
+                      alt={selectedTypeObj.name}
+                      className="h-10 w-10 rounded-xl object-cover border border-neutral-200 dark:border-neutral-700 shrink-0"
+                    />
+                  ) : (
+                    <div className="h-10 w-10 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 flex items-center justify-center shrink-0">
+                      <Layers className="h-5 w-5 text-emerald-600 dark:text-[#D9FF43]" />
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-extrabold text-neutral-900 dark:text-white truncate">
+                        Kategori: {selectedTypeObj.name}
+                      </span>
+                      {selectedTypeObj.room_size && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-white/80 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300">
+                          {selectedTypeObj.room_size}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-neutral-600 dark:text-neutral-400 truncate">
+                      {selectedTypeObj.description || "Foto & keterangan landing page terhubung langsung ke kategori ini"}
+                    </p>
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-800 dark:text-emerald-300">
+                    <Globe className="h-3 w-3" /> Sync Web
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Status Kamar */}
@@ -370,14 +501,45 @@ export function RoomModal({ isOpen, onClose, roomToEdit, onSuccess }: RoomModalP
           </div>
         </div>
 
-        {/* Catatan */}
+        {/* Showcase Banner: Explaining Landing Page Centralization */}
+        <div className="rounded-2xl p-3.5 bg-amber-500/10 border border-amber-500/20 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2.5">
+          <Globe className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+          <div className="space-y-0.5">
+            <p className="font-bold">
+              Foto Kamar Terpusat pada Kategori Showcase ({roomType || "Kategori"})
+            </p>
+            <p className="text-[11px] text-amber-800/90 dark:text-amber-300/90 leading-relaxed">
+              Galeri foto, fasilitas standar, dan harga acuan website publik dikelola pada menu <strong>Kategori & Showcase Landing Page</strong>. Unit nomor {roomNumber || "ini"} otomatis tampil di website publik mengikuti foto kategori tersebut.
+            </p>
+          </div>
+        </div>
+
+        {/* Keterangan Tambahan Unit (Opsional) */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
+              <Info className="h-3.5 w-3.5 text-neutral-500" />
+              <span>Keterangan Tambahan Unit {roomNumber || ""} (Opsional)</span>
+            </label>
+            <span className="text-[10px] font-semibold text-neutral-500">Unit Spesifik</span>
+          </div>
+          <textarea
+            rows={2}
+            placeholder="Contoh: Unit sudut dengan sirkulasi angin sepoi-sepoi, dekat tangga utama."
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="w-full rounded-2xl border border-neutral-200/80 bg-neutral-50 p-3 text-xs font-medium text-neutral-900 focus:ring-2 focus:ring-[#0A0A0A] focus:outline-none dark:bg-neutral-800 dark:border-neutral-700 dark:text-white"
+          />
+        </div>
+
+        {/* Catatan Kamar (Internal Pengelola) */}
         <div>
           <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-1">
-            Catatan Kamar
+            Catatan Kamar (Internal Pengelola)
           </label>
           <textarea
             rows={2}
-            placeholder="Contoh: Dekat balkon utama, jendela menghadap barat"
+            placeholder="Contoh: Dekat pintu gerbang depan, meteran listrik nomor 4"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             className="w-full rounded-2xl border border-neutral-200/80 bg-neutral-50 p-3 text-xs font-medium text-neutral-900 focus:ring-2 focus:ring-[#0A0A0A] focus:outline-none dark:bg-neutral-800 dark:border-neutral-700 dark:text-white"

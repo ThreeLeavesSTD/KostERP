@@ -19,6 +19,7 @@ import staffRoutes from "./routes/staff.routes";
 import rolesRoutes from "./routes/roles.routes";
 import leadsRoutes from "./routes/leads.routes";
 import surveysRoutes from "./routes/surveys.routes";
+import roomTypesRoutes from "./routes/room-types.routes";
 import { requireAuth } from "./middleware/auth";
 
 dotenv.config();
@@ -66,6 +67,7 @@ app.use("/api/auth", authRoutes); // Menggunakan requireAuth di dalam router
 
 app.use("/api/dashboard", requireAuth, dashboardRoutes);
 app.use("/api/properties", requireAuth, propertiesRoutes);
+app.use("/api/room-types", requireAuth, roomTypesRoutes);
 app.use("/api/rooms", requireAuth, roomsRoutes);
 app.use("/api/tenants", requireAuth, tenantsRoutes);
 app.use("/api/leases", requireAuth, leasesRoutes);

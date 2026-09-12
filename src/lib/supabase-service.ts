@@ -2,6 +2,7 @@ import { createClient } from "./supabase/client";
 import {
   Property,
   Room,
+  RoomType,
   Tenant,
   Lease,
   Invoice,
@@ -19,6 +20,54 @@ const isValidUUID = (str?: string): boolean => {
 };
 
 export const FrontendSupabaseService = {
+  // Get all room types with room counts
+  async getRoomTypes(propertyId?: string): Promise<RoomType[]> {
+    const supabase = createClient();
+    let query = supabase.from("room_types").select("*").order("display_order", { ascending: true });
+
+    if (propertyId && isValidUUID(propertyId)) {
+      query = query.eq("property_id", propertyId);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.warn("Supabase fetch room_types warning:", error.message);
+      return [];
+    }
+
+    // Get rooms for calculating counts
+    let roomsQuery = supabase.from("rooms").select("id, room_type, room_type_id, status");
+    if (propertyId && isValidUUID(propertyId)) {
+      roomsQuery = roomsQuery.eq("property_id", propertyId);
+    }
+    const { data: roomsData } = await roomsQuery;
+    const allRooms = roomsData || [];
+
+    return (data || []).map((rt: any) => {
+      const linkedRooms = allRooms.filter(
+        (r: any) => (r.room_type_id && r.room_type_id === rt.id) || r.room_type === rt.name
+      );
+      const availableRooms = linkedRooms.filter((r: any) => r.status === "available").length;
+
+      return {
+        id: rt.id,
+        property_id: rt.property_id,
+        name: rt.name,
+        slug: rt.slug,
+        base_price: Number(rt.base_price),
+        facilities: rt.facilities || [],
+        room_size: rt.room_size || "",
+        description: rt.description || "",
+        photos: rt.photos || [],
+        is_active: rt.is_active ?? true,
+        display_order: rt.display_order || 0,
+        created_at: rt.created_at,
+        updated_at: rt.updated_at,
+        total_rooms: linkedRooms.length,
+        available_rooms: availableRooms,
+      };
+    });
+  },
   // Get all properties
   async getProperties(): Promise<Property[]> {
     const supabase = createClient();
@@ -73,10 +122,13 @@ export const FrontendSupabaseService = {
         room_number: room.room_number,
         floor: room.floor,
         room_type: room.room_type || "Standard",
+        room_type_id: room.room_type_id || null,
         base_price: Number(room.base_price),
         facilities: room.facilities || [],
         status: room.status,
         notes: room.notes,
+        description: room.description || null,
+        photos: room.photos || [],
         created_at: room.created_at,
         tenant_id: tenant?.id,
         current_tenant: tenant ? {
@@ -335,10 +387,13 @@ export const FrontendSupabaseService = {
       room_number: String(room.room_number || "").trim(),
       floor: Number(room.floor) || 1,
       room_type: room.room_type || "Standard",
+      room_type_id: isValidUUID(room.room_type_id) ? room.room_type_id : null,
       base_price: Number(room.base_price) || 0,
       facilities: room.facilities || [],
       status: room.status || "available",
       notes: room.notes || null,
+      description: room.description || null,
+      photos: room.photos || [],
     };
     if (isValidUUID(room.id)) {
       insertObj.id = room.id;
@@ -355,10 +410,13 @@ export const FrontendSupabaseService = {
     if (updates.room_number !== undefined) updateData.room_number = String(updates.room_number).trim();
     if (updates.floor !== undefined) updateData.floor = Number(updates.floor);
     if (updates.room_type !== undefined) updateData.room_type = updates.room_type;
+    if (updates.room_type_id !== undefined) updateData.room_type_id = isValidUUID(updates.room_type_id) ? updates.room_type_id : null;
     if (updates.base_price !== undefined) updateData.base_price = Number(updates.base_price);
     if (updates.facilities !== undefined) updateData.facilities = updates.facilities;
     if (updates.status !== undefined) updateData.status = updates.status;
     if (updates.notes !== undefined) updateData.notes = updates.notes;
+    if (updates.description !== undefined) updateData.description = updates.description;
+    if (updates.photos !== undefined) updateData.photos = updates.photos;
 
     let query = supabase.from("rooms").update(updateData);
     if (isValidUUID(id)) {
@@ -383,6 +441,59 @@ export const FrontendSupabaseService = {
     }
     const { error } = await query;
     if (error) console.error("Error deleting room in Supabase:", error);
+  },
+
+  // ROOM TYPES MUTATIONS
+  async createRoomType(roomType: Partial<RoomType>) {
+    const supabase = createClient();
+    const propId = isValidUUID(roomType.property_id)
+      ? roomType.property_id
+      : await this.getDefaultPropertyId();
+
+    const insertObj: any = {
+      property_id: propId,
+      name: String(roomType.name || "").trim(),
+      slug: roomType.slug || String(roomType.name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+      base_price: Number(roomType.base_price) || 0,
+      facilities: roomType.facilities || [],
+      room_size: roomType.room_size || null,
+      description: roomType.description || null,
+      photos: roomType.photos || [],
+      is_active: roomType.is_active ?? true,
+      display_order: Number(roomType.display_order) || 0,
+    };
+    if (isValidUUID(roomType.id)) {
+      insertObj.id = roomType.id;
+    }
+
+    const { data, error } = await supabase.from("room_types").insert(insertObj).select().single();
+    if (error) console.error("Error creating room_type in Supabase:", error);
+    return data;
+  },
+
+  async updateRoomType(id: string, updates: Partial<RoomType>) {
+    const supabase = createClient();
+    const updateData: any = {};
+    if (updates.name !== undefined) updateData.name = String(updates.name).trim();
+    if (updates.slug !== undefined) updateData.slug = updates.slug;
+    if (updates.base_price !== undefined) updateData.base_price = Number(updates.base_price);
+    if (updates.facilities !== undefined) updateData.facilities = updates.facilities;
+    if (updates.room_size !== undefined) updateData.room_size = updates.room_size;
+    if (updates.description !== undefined) updateData.description = updates.description;
+    if (updates.photos !== undefined) updateData.photos = updates.photos;
+    if (updates.is_active !== undefined) updateData.is_active = updates.is_active;
+    if (updates.display_order !== undefined) updateData.display_order = Number(updates.display_order);
+    updateData.updated_at = new Date().toISOString();
+
+    const { data, error } = await supabase.from("room_types").update(updateData).eq("id", id).select().single();
+    if (error) console.error("Error updating room_type in Supabase:", error);
+    return data;
+  },
+
+  async deleteRoomType(id: string) {
+    const supabase = createClient();
+    const { error } = await supabase.from("room_types").delete().eq("id", id);
+    if (error) console.error("Error deleting room_type in Supabase:", error);
   },
 
   async createTenant(tenant: Partial<Tenant>) {

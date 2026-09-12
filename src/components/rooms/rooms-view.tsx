@@ -29,11 +29,13 @@ import { Button } from "@/components/ui/button";
 interface RoomsViewProps {
   onCreateLeaseForRoom?: (roomId: string) => void;
   onOpenElectricityForRoom?: (roomId: string) => void;
+  onNavigateTab?: (tab: string) => void;
 }
 
 export function RoomsView({
   onCreateLeaseForRoom,
   onOpenElectricityForRoom,
+  onNavigateTab,
 }: RoomsViewProps) {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [complaints, setComplaints] = useState<RoomComplaint[]>([]);
@@ -177,6 +179,17 @@ export function RoomsView({
         </div>
 
         <div className="flex items-center gap-2">
+          {onNavigateTab && (
+            <Button
+              onClick={() => onNavigateTab("room-types")}
+              variant="outline"
+              className="gap-2 shadow-spatial font-bold text-xs border-neutral-300 dark:border-white/10 text-neutral-800 dark:text-neutral-200 bg-white dark:bg-[#18181B] hover:border-[#D9FF43]"
+            >
+              <Layers className="h-4 w-4 text-[#0A0A0A] dark:text-[#D9FF43]" />
+              <span>Kategori & Showcase</span>
+            </Button>
+          )}
+
           <Button
             onClick={() => handleOpenRoomComplaints(undefined)}
             variant="outline"
@@ -199,6 +212,28 @@ export function RoomsView({
           </Button>
         </div>
       </div>
+
+      {/* Sub-Navigation Switcher between Units and Showcase Categories */}
+      {onNavigateTab && (
+        <div className="flex items-center gap-2 p-1 bg-neutral-100 dark:bg-neutral-900 rounded-2xl w-fit border border-neutral-200/80 dark:border-white/5">
+          <button
+            type="button"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black bg-white dark:bg-[#18181B] text-neutral-900 dark:text-white shadow-xs"
+          >
+            <DoorClosed className="h-4 w-4 text-emerald-500" />
+            <span>Unit Kamar ({rooms.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigateTab("room-types")}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors"
+          >
+            <Layers className="h-4 w-4 text-neutral-500" />
+            <span>Kategori & Showcase Landing Page</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#D9FF43] text-[#0A0A0A] font-black">Sync Web</span>
+          </button>
+        </div>
+      )}
 
       {/* Summary Capsule Filter Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -386,6 +421,13 @@ export function RoomsView({
                     </p>
                   </div>
 
+                  {/* Public Description Snippet (Landing Page) */}
+                  {room.description && (
+                    <p className="mt-2 text-xs font-medium text-neutral-600 dark:text-neutral-400 line-clamp-2 leading-relaxed">
+                      {room.description}
+                    </p>
+                  )}
+
                   {/* Occupant Frosted Capsule Pod */}
                   {isOccupied && room.current_tenant && (
                     <div className="mt-3.5 rounded-2xl glass-panel p-3 text-xs space-y-1">
@@ -447,13 +489,13 @@ export function RoomsView({
                     );
                   })()}
 
-                  {/* Keterangan Kamar (Room Notes) */}
+                  {/* Catatan Internal (Room Notes) */}
                   {room.notes && (
                     <div className="mt-3 rounded-2xl bg-neutral-50 p-2.5 text-xs text-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-300 border border-neutral-100 dark:border-white/5 flex items-start gap-2">
                       <FileText className="h-3.5 w-3.5 text-neutral-400 mt-0.5 shrink-0" />
                       <div className="min-w-0 flex-1">
                         <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400 block">
-                          Keterangan Kamar
+                          Catatan Internal
                         </span>
                         <p className="text-[11px] font-medium leading-snug break-words mt-0.5">
                           {room.notes}

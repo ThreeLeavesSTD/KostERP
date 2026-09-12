@@ -40,13 +40,13 @@ export const SupabaseService = {
     return data;
   },
 
-  async createProperty(payload: { name: string; address: string; city?: string; phone?: string }) {
+  async createProperty(payload: { name: string; address: string; city?: string; phone?: string; description?: string }) {
     const { data, error } = await supabase.from("properties").insert(payload).select().single();
     if (error) throw error;
     return data;
   },
 
-  async updateProperty(id: string, payload: Partial<{ name: string; address: string; city: string; phone: string }>) {
+  async updateProperty(id: string, payload: Partial<{ name: string; address: string; city: string; phone: string; description: string; cover_image?: string }>) {
     const { data, error } = await supabase.from("properties").update(payload).eq("id", id).select().single();
     if (error) throw error;
     return data;
@@ -97,10 +97,13 @@ export const SupabaseService = {
         room_number: room.room_number,
         floor: room.floor,
         room_type: room.room_type || "Standard",
+        room_type_id: room.room_type_id || null,
         base_price: Number(room.base_price),
         facilities: room.facilities || [],
         status: room.status,
         notes: room.notes,
+        description: room.description || null,
+        photos: room.photos || [],
         created_at: room.created_at,
         tenant_id: tenant?.id,
         current_tenant: tenant ? {
@@ -127,10 +130,13 @@ export const SupabaseService = {
       room_number: String(payload.room_number || "").trim(),
       floor: Number(payload.floor) || 1,
       room_type: payload.room_type || "Standard",
+      room_type_id: isValidUUID(payload.room_type_id) ? payload.room_type_id : null,
       base_price: Number(payload.base_price) || 0,
       facilities: payload.facilities || [],
       status: payload.status || "available",
       notes: payload.notes || null,
+      description: payload.description || null,
+      photos: payload.photos || [],
     };
     if (isValidUUID(payload.id)) {
       insertObj.id = payload.id;
@@ -146,10 +152,13 @@ export const SupabaseService = {
     if (payload.room_number !== undefined) updateData.room_number = String(payload.room_number).trim();
     if (payload.floor !== undefined) updateData.floor = Number(payload.floor);
     if (payload.room_type !== undefined) updateData.room_type = payload.room_type;
+    if (payload.room_type_id !== undefined) updateData.room_type_id = isValidUUID(payload.room_type_id) ? payload.room_type_id : null;
     if (payload.base_price !== undefined) updateData.base_price = Number(payload.base_price);
     if (payload.facilities !== undefined) updateData.facilities = payload.facilities;
     if (payload.status !== undefined) updateData.status = payload.status;
     if (payload.notes !== undefined) updateData.notes = payload.notes;
+    if (payload.description !== undefined) updateData.description = payload.description;
+    if (payload.photos !== undefined) updateData.photos = payload.photos;
 
     let query = supabase.from("rooms").update(updateData);
     if (isValidUUID(id)) {
@@ -172,6 +181,94 @@ export const SupabaseService = {
       query = query.eq("room_number", id.replace(/^room-/, ""));
     }
     const { error } = await query;
+    if (error) throw error;
+    return { success: true };
+  },
+
+  // Room Types (Kategori & Showcase Kamar)
+  async getRoomTypes(propertyId?: string) {
+    let query = supabase.from("room_types").select("*").order("display_order", { ascending: true });
+    if (propertyId && isValidUUID(propertyId)) {
+      query = query.eq("property_id", propertyId);
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+
+    let roomsQuery = supabase.from("rooms").select("id, room_type, room_type_id, status");
+    if (propertyId && isValidUUID(propertyId)) {
+      roomsQuery = roomsQuery.eq("property_id", propertyId);
+    }
+    const { data: roomsData } = await roomsQuery;
+    const allRooms = roomsData || [];
+
+    return (data || []).map((rt: any) => {
+      const linkedRooms = allRooms.filter(
+        (r: any) => (r.room_type_id && r.room_type_id === rt.id) || r.room_type === rt.name
+      );
+      const availableRooms = linkedRooms.filter((r: any) => r.status === "available").length;
+
+      return {
+        id: rt.id,
+        property_id: rt.property_id,
+        name: rt.name,
+        slug: rt.slug,
+        base_price: Number(rt.base_price),
+        facilities: rt.facilities || [],
+        room_size: rt.room_size || "",
+        description: rt.description || "",
+        photos: rt.photos || [],
+        is_active: rt.is_active ?? true,
+        display_order: rt.display_order || 0,
+        created_at: rt.created_at,
+        updated_at: rt.updated_at,
+        total_rooms: linkedRooms.length,
+        available_rooms: availableRooms,
+      };
+    });
+  },
+
+  async createRoomType(payload: any) {
+    const propId = isValidUUID(payload.property_id) ? payload.property_id : await this.getDefaultPropertyId();
+    const insertObj: any = {
+      property_id: propId,
+      name: String(payload.name || "").trim(),
+      slug: payload.slug || String(payload.name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+      base_price: Number(payload.base_price) || 0,
+      facilities: payload.facilities || [],
+      room_size: payload.room_size || null,
+      description: payload.description || null,
+      photos: payload.photos || [],
+      is_active: payload.is_active ?? true,
+      display_order: Number(payload.display_order) || 0,
+    };
+    if (isValidUUID(payload.id)) {
+      insertObj.id = payload.id;
+    }
+    const { data, error } = await supabase.from("room_types").insert(insertObj).select().single();
+    if (error) throw error;
+    return data;
+  },
+
+  async updateRoomType(id: string, payload: any) {
+    const updateData: any = {};
+    if (payload.name !== undefined) updateData.name = String(payload.name).trim();
+    if (payload.slug !== undefined) updateData.slug = payload.slug;
+    if (payload.base_price !== undefined) updateData.base_price = Number(payload.base_price);
+    if (payload.facilities !== undefined) updateData.facilities = payload.facilities;
+    if (payload.room_size !== undefined) updateData.room_size = payload.room_size;
+    if (payload.description !== undefined) updateData.description = payload.description;
+    if (payload.photos !== undefined) updateData.photos = payload.photos;
+    if (payload.is_active !== undefined) updateData.is_active = payload.is_active;
+    if (payload.display_order !== undefined) updateData.display_order = Number(payload.display_order);
+    updateData.updated_at = new Date().toISOString();
+
+    const { data, error } = await supabase.from("room_types").update(updateData).eq("id", id).select().single();
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteRoomType(id: string) {
+    const { error } = await supabase.from("room_types").delete().eq("id", id);
     if (error) throw error;
     return { success: true };
   },

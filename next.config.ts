@@ -11,6 +11,14 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  rewrites: async () => {
+    return [
+      {
+        source: "/:path((?!api|_next|favicon.ico).*)",
+        destination: "/",
+      },
+    ];
+  },
 };
 
 export default nextConfig;

@@ -197,7 +197,7 @@ export function ManageWalletsCategoriesModal({
       c.scope === "wallet" ||
       c.category_kind === "asset" ||
       c.category_kind === "liability" ||
-      (!c.type && ["bank", "cash", "e-wallet", "ewallet", "business", "crypto", "digital bank", "hutang vendor", "cicilan / pinjaman", "deposit penghuni"].includes(c.name.toLowerCase()));
+      (!c.type && c?.name && ["bank", "cash", "e-wallet", "ewallet", "business", "crypto", "digital bank", "hutang vendor", "cicilan / pinjaman", "deposit penghuni"].includes(c.name.toLowerCase()));
     if (!isWallet) return false;
     return walletKindType === "asset" ? c.category_kind !== "liability" : c.category_kind === "liability";
   });

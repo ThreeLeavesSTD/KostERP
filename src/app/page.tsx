@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { UserRole } from "@/types";
 import { Header } from "@/components/layout/header";
 import { Sidebar } from "@/components/layout/sidebar";
@@ -9,18 +9,20 @@ import { MobileNav } from "@/components/layout/mobile-nav";
 import { OwnerDashboardView } from "@/components/owner/owner-dashboard-view";
 import { OwnerAuditView } from "@/components/owner/owner-audit-view";
 import { RoomsView } from "@/components/rooms/rooms-view";
+import { RoomTypesView } from "@/components/rooms/room-types-view";
 import { TenantsView } from "@/components/tenants/tenants-view";
 import { ElectricityView } from "@/components/electricity/electricity-view";
 import { BillingView } from "@/components/billing/billing-view";
-import { PaymentSettingsView } from "@/components/billing/payment-settings-view";
 import { AIAssistantView } from "@/components/assistant/ai-assistant-view";
+import { FloatingAIChatbot } from "@/components/assistant/floating-ai-chatbot";
 import { ProfileView } from "@/components/profile/profile-view";
 import { StaffManagementView } from "@/components/staff/staff-management-view";
 import { CashFlowView } from "@/components/finance/cashflow-view";
 import { LeadsView } from "@/components/leads/leads-view";
+import { PropertySettingsView } from "@/components/property/property-settings-view";
 
 import { useAuth } from "@/lib/auth-context";
-import { hasPermission, getPermissionsForRole } from "@/lib/permissions";
+import { hasPermission, getPermissionsForRole, ALL_PERMISSIONS } from "@/lib/permissions";
 import { LoginForm } from "@/components/auth/login-form";
 
 export default function HomePage() {
@@ -29,10 +31,11 @@ export default function HomePage() {
   const isAuthenticated = !!user;
 
   const [activeTab, setActiveTab] = useState<string>("owner-dashboard");
+  const [isAiChatOpen, setIsAiChatOpen] = useState<boolean>(false);
   const [assistantInitialPrompt, setAssistantInitialPrompt] = useState<string>("");
+  const [isTabInitialized, setIsTabInitialized] = useState<boolean>(false);
 
   useEffect(() => {
-
     // Prevent non-Error Event objects from bubbling to Next.js dev overlay
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       if (
@@ -49,49 +52,129 @@ export default function HomePage() {
     };
   }, []);
 
-  // Update tab default berdasarkan role user yang aktif
-  useEffect(() => {
-    if (isAuthenticated) {
-      if (hasPermission(currentRole, "owner-dashboard", profile?.permissions)) {
-        setActiveTab("owner-dashboard");
-      } else if (hasPermission(currentRole, "rooms", profile?.permissions)) {
-        setActiveTab("rooms");
-      } else {
-        const perms = getPermissionsForRole(currentRole, profile?.permissions);
-        setActiveTab(perms[0] || "profile");
-      }
-    }
-  }, [isAuthenticated, currentRole, profile?.permissions]);
+  // Helper untuk menentukan tab default sesuai izin role
+  const getDefaultTab = useCallback((userRole: UserRole, userPerms?: string[]) => {
+    if (hasPermission(userRole, "owner-dashboard", userPerms)) return "owner-dashboard";
+    if (hasPermission(userRole, "rooms", userPerms)) return "rooms";
+    const allowed = getPermissionsForRole(userRole, userPerms);
+    return allowed[0] || "profile";
+  }, []);
 
-  const handleNavigateTab = (tab: string, prompt?: string) => {
+  // Navigasi tab dengan persistensi ke URL hash & LocalStorage
+  const handleNavigateTab = useCallback((tab: string, prompt?: string) => {
+    // Menu AI Chatbot sekarang menjadi pop-up di pojok kanan bawah agar pengguna bisa membuka menu lain sambil chat
+    if (tab === "ai-assistant") {
+      setIsAiChatOpen((prev) => !prev);
+      if (prompt) {
+        setAssistantInitialPrompt(prompt);
+      }
+      return;
+    }
+
+    if (!tab || typeof tab !== "string" || !ALL_PERMISSIONS.includes(tab)) return;
     if (prompt) {
       setAssistantInitialPrompt(prompt);
     }
     setActiveTab(tab);
-  };
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("kost_active_tab", tab);
+        if (window.location.hash !== `#${tab}`) {
+          window.history.replaceState(null, "", `#${tab}`);
+        }
+      } catch {}
+    }
+  }, []);
+
+  // 1. Inisialisasi tab saat pertama kali render di browser (baca URL pathname / hash / search / localStorage)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const rawPath = window.location.pathname.replace(/^\/+/, "").split("/")[0].trim();
+    const hash = window.location.hash.replace("#", "").trim();
+    const queryTab = new URLSearchParams(window.location.search).get("tab")?.trim();
+    const localTab = localStorage.getItem("kost_active_tab")?.trim();
+
+    const candidateTab = [rawPath, hash, queryTab, localTab].find(
+      (t) => t && ALL_PERMISSIONS.includes(t)
+    );
+
+    if (candidateTab === "ai-assistant") {
+      setActiveTab("owner-dashboard");
+      setIsAiChatOpen(true);
+    } else if (candidateTab) {
+      setActiveTab(candidateTab);
+    }
+    setIsTabInitialized(true);
+  }, []);
+
+  // 2. Validasi izin akses tab saat autentikasi & profil termuat
+  // CATATAN: Jangan mereset tab jika tab yang sedang aktif diizinkan untuk role ini!
+  useEffect(() => {
+    if (!isAuthenticated || !isTabInitialized) return;
+
+    // Cek apakah tab saat ini diizinkan
+    const isAllowed = hasPermission(currentRole, activeTab, profile?.permissions);
+
+    if (isAllowed) {
+      // Tab saat ini sah & diizinkan, sinkronkan ke URL & storage
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("kost_active_tab", activeTab);
+          if (window.location.hash !== `#${activeTab}`) {
+            window.history.replaceState(null, "", `#${activeTab}`);
+          }
+        } catch {}
+      }
+    } else {
+      // Tab saat ini tidak diizinkan untuk role ini, alihkan ke default tab yang diizinkan
+      const fallbackTab = getDefaultTab(currentRole, profile?.permissions);
+      handleNavigateTab(fallbackTab);
+    }
+  }, [isAuthenticated, isTabInitialized, currentRole, profile?.permissions, activeTab, getDefaultTab, handleNavigateTab]);
+
+  // 3. Listener perubahan URL hash / browser back & forward (popstate & hashchange)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleLocationChange = () => {
+      const rawPath = window.location.pathname.replace(/^\/+/, "").split("/")[0].trim();
+      const hash = window.location.hash.replace("#", "").trim();
+      const candidate = (rawPath && ALL_PERMISSIONS.includes(rawPath)) ? rawPath : hash;
+
+      if (candidate && ALL_PERMISSIONS.includes(candidate) && hasPermission(currentRole, candidate, profile?.permissions)) {
+        setActiveTab(candidate);
+        try {
+          localStorage.setItem("kost_active_tab", candidate);
+        } catch {}
+      }
+    };
+
+    window.addEventListener("hashchange", handleLocationChange);
+    window.addEventListener("popstate", handleLocationChange);
+    return () => {
+      window.removeEventListener("hashchange", handleLocationChange);
+      window.removeEventListener("popstate", handleLocationChange);
+    };
+  }, [currentRole, profile?.permissions]);
 
   const handleLogout = async () => {
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.removeItem("kost_active_tab");
+        window.history.replaceState(null, "", window.location.pathname);
+      } catch {}
+    }
     await signOut();
   };
 
   const handleCreateLeaseForRoom = (roomId: string) => {
-    setActiveTab("tenants");
+    handleNavigateTab("tenants");
   };
 
   const handleOpenElectricityForRoom = (roomId: string) => {
-    setActiveTab("electricity");
+    handleNavigateTab("electricity");
   };
-
-  if (isLoading) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-slate-50">
-        <div className="text-center">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-600 border-t-transparent mx-auto" />
-          <p className="mt-3 text-xs font-semibold text-gray-500">Memuat Sistem ERP Kost...</p>
-        </div>
-      </div>
-    );
-  }
 
   if (!isAuthenticated) {
     return <LoginForm />;
@@ -117,7 +200,7 @@ export default function HomePage() {
         />
 
         {/* Content Area with left offset for fixed dock */}
-        <main className="md:pl-20 rounded-3xl p-3 sm:p-5 lg:p-6 pb-28 md:pb-6">
+        <main className="md:pl-24 rounded-3xl p-3 sm:p-5 lg:p-6 pb-28 md:pb-6">
           <div className="mx-auto max-w-7xl">
             {activeTab === "owner-dashboard" && (
               <OwnerDashboardView onNavigateTab={handleNavigateTab} />
@@ -150,13 +233,22 @@ export default function HomePage() {
               <RoomsView
                 onCreateLeaseForRoom={handleCreateLeaseForRoom}
                 onOpenElectricityForRoom={handleOpenElectricityForRoom}
+                onNavigateTab={handleNavigateTab}
+              />
+            )}
+            {activeTab === "room-types" && (
+              <RoomTypesView
+                currentRole={currentRole}
+                onNavigateTab={handleNavigateTab}
               />
             )}
             {activeTab === "tenants" && <TenantsView />}
             {activeTab === "leads" && <LeadsView currentRole={currentRole} />}
             {activeTab === "electricity" && <ElectricityView />}
             {activeTab === "billing" && <BillingView />}
-            {activeTab === "billing-settings" && <PaymentSettingsView />}
+            {activeTab === "property-settings" && (
+              <PropertySettingsView currentRole={currentRole} />
+            )}
           </div>
         </main>
       </div>
@@ -166,6 +258,16 @@ export default function HomePage() {
         currentRole={currentRole}
         activeTab={activeTab}
         onTabChange={handleNavigateTab}
+      />
+
+      {/* Floating AI Chatbot Pop-up di Pojok Kanan Bawah */}
+      <FloatingAIChatbot
+        isOpen={isAiChatOpen}
+        onToggle={() => setIsAiChatOpen((prev) => !prev)}
+        onClose={() => setIsAiChatOpen(false)}
+        initialPrompt={assistantInitialPrompt}
+        onClearInitialPrompt={() => setAssistantInitialPrompt("")}
+        onNavigateTab={handleNavigateTab}
       />
     </div>
   );

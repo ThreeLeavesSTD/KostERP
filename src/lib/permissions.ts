@@ -6,11 +6,12 @@ export const ALL_PERMISSIONS = [
   "cashflow",
   "staff-management",
   "rooms",
+  "room-types",
   "tenants",
   "electricity",
   "billing",
   "owner-audit",
-  "billing-settings",
+  "property-settings",
   "profile",
   "leads",
 ];
@@ -23,21 +24,30 @@ export function getPermissionsForRole(
   role: UserRole | string,
   customPermissions?: string[]
 ): string[] {
+  // 1. Role 'owner' adalah pemilik utama dan selalu memiliki hak akses penuh ke seluruh fitur sistem
+  if (role === "owner") {
+    return [...ALL_PERMISSIONS];
+  }
+
+  // 2. Jika ada customPermissions (misal dari database profile / role staff)
   if (customPermissions && Array.isArray(customPermissions) && customPermissions.length > 0) {
-    return customPermissions;
+    const perms = new Set(customPermissions);
+    // Sub-modul kamar: jika user memiliki akses 'rooms', maka otomatis berhak akses 'room-types'
+    if (perms.has("rooms")) {
+      perms.add("room-types");
+    }
+    return Array.from(perms);
   }
 
   switch (role) {
-    case "owner":
-      return [...ALL_PERMISSIONS];
     case "admin":
       return ALL_PERMISSIONS.filter(
-        (perm) => !["owner-audit", "staff-management", "billing-settings"].includes(perm)
+        (perm) => !["owner-audit", "staff-management", "property-settings"].includes(perm)
       );
     case "cleaning_staff":
-      return ["rooms", "profile"];
+      return ["rooms", "room-types", "profile"];
     default:
-      return ["rooms", "profile"];
+      return ["rooms", "room-types", "profile"];
   }
 }
 

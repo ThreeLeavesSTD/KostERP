@@ -29,7 +29,7 @@ import {
   Receipt,
   Zap,
   FileSpreadsheet,
-  CreditCard,
+  Wallet,
   Layers,
   Settings2,
 } from "lucide-react";
@@ -53,6 +53,12 @@ const AVAILABLE_PERMISSIONS = [
     icon: LayoutDashboard,
   },
   {
+    id: "cashflow",
+    name: "Kas Operasional & Transaksi",
+    desc: "Catat transaksi pemasukan, pengeluaran kas operasional, dan wallet",
+    icon: Wallet,
+  },
+  {
     id: "ai-assistant",
     name: "Kost Concierge AI Assistant",
     desc: "Akses chatbot cerdas operasional & prompt otomatisasi",
@@ -65,9 +71,21 @@ const AVAILABLE_PERMISSIONS = [
     icon: DoorClosed,
   },
   {
+    id: "room-types",
+    name: "Kategori & Showcase Landing Page",
+    desc: "Kelola tipe kamar acuan, harga showcase web, dan galeri foto publik",
+    icon: Layers,
+  },
+  {
     id: "tenants",
     name: "Penghuni & Dokumen KTP",
     desc: "Data penyewa, masa sewa aktif, dan pratinjau KTP",
+    icon: Users,
+  },
+  {
+    id: "leads",
+    name: "Leads & Survey Calon Penghuni",
+    desc: "Kanban pipeline leads, followup WhatsApp, dan jadwal survey",
     icon: Users,
   },
   {
@@ -89,10 +107,10 @@ const AVAILABLE_PERMISSIONS = [
     icon: FileSpreadsheet,
   },
   {
-    id: "billing-settings",
-    name: "Pengaturan Rekening Bank",
-    desc: "Kelola daftar nomor rekening pembayaran sewa & QRIS",
-    icon: CreditCard,
+    id: "property-settings",
+    name: "Pengaturan Identitas Properti",
+    desc: "Ubah nama kost, alamat, kota, dan kontak penagihan",
+    icon: Settings2,
   },
   {
     id: "staff-management",

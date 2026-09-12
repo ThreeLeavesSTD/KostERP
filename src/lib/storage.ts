@@ -1,6 +1,7 @@
 import {
   Property,
   Room,
+  RoomType,
   Tenant,
   Lease,
   Invoice,
@@ -19,10 +20,13 @@ import {
   FinanceWallet,
   FinanceCategory,
   TransactionType,
+  Lead,
+  SurveySchedule,
 } from "@/types";
 import {
   initialProperties,
   initialRooms,
+  initialRoomTypes,
   initialTenants,
   initialLeases,
   initialInvoices,
@@ -35,6 +39,8 @@ import {
   initialCashTransactions,
   initialFinanceWallets,
   initialFinanceCategories,
+  initialLeads,
+  initialSurveys,
 } from "./mock-data";
 import { FrontendSupabaseService } from "./supabase-service";
 import { KostApiClient } from "./api-client";
@@ -43,6 +49,7 @@ import { getPermissionsForRole, hasPermission as checkStaticPermission } from ".
 const STORAGE_KEYS = {
   PROPERTIES: "kost_erp_properties",
   ROOMS: "kost_erp_rooms",
+  ROOM_TYPES: "kost_erp_room_types",
   TENANTS: "kost_erp_tenants",
   LEASES: "kost_erp_leases",
   INVOICES: "kost_erp_invoices",
@@ -56,6 +63,8 @@ const STORAGE_KEYS = {
   CASH_TRANSACTIONS: "kost_erp_cash_transactions",
   WALLETS: "kost_erp_wallets",
   FINANCE_CATEGORIES: "kost_erp_finance_categories",
+  LEADS: "kost_erp_leads",
+  SURVEYS: "kost_erp_surveys",
 };
 
 // Safe JSON parser for localStorage
@@ -147,6 +156,7 @@ export const KostStorage = {
       // 1. Try Backend REST API first
       let properties: Property[] = [];
       let rooms: Room[] = [];
+      let roomTypes: RoomType[] = [];
       let tenants: Tenant[] = [];
       let leases: Lease[] = [];
       let invoices: Invoice[] = [];
@@ -158,6 +168,7 @@ export const KostStorage = {
       try {
         properties = await KostApiClient.getProperties();
         rooms = await KostApiClient.getRooms();
+        roomTypes = await KostApiClient.getRoomTypes();
         tenants = await KostApiClient.getTenants();
         leases = await KostApiClient.getLeases();
         invoices = await KostApiClient.getInvoices();
@@ -169,6 +180,7 @@ export const KostStorage = {
         // 2. Fallback to direct Supabase browser client
         properties = await FrontendSupabaseService.getProperties();
         rooms = await FrontendSupabaseService.getRooms();
+        roomTypes = await FrontendSupabaseService.getRoomTypes();
         tenants = await FrontendSupabaseService.getTenants();
         leases = await FrontendSupabaseService.getLeases();
         invoices = await FrontendSupabaseService.getInvoices();
@@ -180,6 +192,7 @@ export const KostStorage = {
 
       if (properties.length > 0) setItem(STORAGE_KEYS.PROPERTIES, properties);
       if (rooms.length > 0) setItem(STORAGE_KEYS.ROOMS, rooms);
+      if (roomTypes.length > 0) setItem(STORAGE_KEYS.ROOM_TYPES, roomTypes);
       if (tenants.length > 0) setItem(STORAGE_KEYS.TENANTS, tenants);
       if (leases.length > 0) setItem(STORAGE_KEYS.LEASES, leases);
       if (invoices.length > 0) setItem(STORAGE_KEYS.INVOICES, invoices);
@@ -199,6 +212,7 @@ export const KostStorage = {
   resetToDefault: () => {
     setItem(STORAGE_KEYS.PROPERTIES, initialProperties);
     setItem(STORAGE_KEYS.ROOMS, initialRooms);
+    setItem(STORAGE_KEYS.ROOM_TYPES, initialRoomTypes);
     setItem(STORAGE_KEYS.TENANTS, initialTenants);
     setItem(STORAGE_KEYS.LEASES, initialLeases);
     setItem(STORAGE_KEYS.INVOICES, initialInvoices);
@@ -215,6 +229,18 @@ export const KostStorage = {
 
   // PROPERTIES
   getProperties: (): Property[] => getItem(STORAGE_KEYS.PROPERTIES, initialProperties),
+
+  updateProperty: (id: string, updates: Partial<Property>): Property => {
+    const all = getItem<Property[]>(STORAGE_KEYS.PROPERTIES, initialProperties);
+    const updated = all.map((p) => (p.id === id ? { ...p, ...updates } : p));
+    setItem(STORAGE_KEYS.PROPERTIES, updated);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("kost_storage_change", { detail: { key: STORAGE_KEYS.PROPERTIES } })
+      );
+    }
+    return updated.find((p) => p.id === id) || updated[0];
+  },
 
   // ROOMS (RELATIONALLY LINKED TO TENANTS VIA TENANT_ID AS PRIMARY KEY)
   getRooms: (): Room[] => {
@@ -397,6 +423,42 @@ export const KostStorage = {
     const filtered = rawRooms.filter((r) => r.id !== id);
     setItem(STORAGE_KEYS.ROOMS, filtered);
     FrontendSupabaseService.deleteRoom(id).catch((err) => console.warn("Supabase room delete sync:", err));
+    return true;
+  },
+
+  // ROOM TYPES (KATEGORI & SHOWCASE KAMAR)
+  getRoomTypes: (): RoomType[] => {
+    return getItem<RoomType[]>(STORAGE_KEYS.ROOM_TYPES, initialRoomTypes);
+  },
+
+  addRoomType: (roomTypeData: Omit<RoomType, "id" | "created_at"> & { id?: string }): RoomType => {
+    const types = KostStorage.getRoomTypes();
+    const newType: RoomType = {
+      ...roomTypeData,
+      id: roomTypeData.id || generateUUID(),
+      created_at: new Date().toISOString(),
+    };
+    setItem(STORAGE_KEYS.ROOM_TYPES, [...types, newType]);
+    FrontendSupabaseService.createRoomType(newType).catch((err) => console.warn("Supabase room type sync:", err));
+    return newType;
+  },
+
+  updateRoomType: (id: string, updates: Partial<RoomType>): RoomType | null => {
+    const types = KostStorage.getRoomTypes();
+    const index = types.findIndex((t) => t.id === id);
+    if (index === -1) return null;
+    const updated = { ...types[index], ...updates, updated_at: new Date().toISOString() };
+    types[index] = updated;
+    setItem(STORAGE_KEYS.ROOM_TYPES, [...types]);
+    FrontendSupabaseService.updateRoomType(id, updates).catch((err) => console.warn("Supabase room type update sync:", err));
+    return updated;
+  },
+
+  deleteRoomType: (id: string): boolean => {
+    const types = KostStorage.getRoomTypes();
+    const filtered = types.filter((t) => t.id !== id);
+    setItem(STORAGE_KEYS.ROOM_TYPES, filtered);
+    FrontendSupabaseService.deleteRoomType(id).catch((err) => console.warn("Supabase room type delete sync:", err));
     return true;
   },
 
@@ -1259,7 +1321,7 @@ export const KostStorage = {
     );
 
     // Pastikan jika storage lokal lama belum ada kategori 'Operasional Kost', tambahkan secara otomatis
-    if (!list.some((c) => c.name.toLowerCase() === "operasional kost")) {
+    if (!list.some((c) => c?.name && c.name.toLowerCase() === "operasional kost")) {
       const opCat: FinanceCategory = {
         id: "cat-exp-00",
         name: "Operasional Kost",
@@ -1283,7 +1345,7 @@ export const KostStorage = {
           c.scope === "wallet" ||
           c.category_kind === "asset" ||
           c.category_kind === "liability" ||
-          (!c.type && ["bank", "cash", "e-wallet", "ewallet", "business", "crypto", "digital bank", "hutang vendor", "cicilan / pinjaman", "deposit penghuni"].includes(c.name.toLowerCase()))
+          (!c.type && c?.name && ["bank", "cash", "e-wallet", "ewallet", "business", "crypto", "digital bank", "hutang vendor", "cicilan / pinjaman", "deposit penghuni"].includes(c.name.toLowerCase()))
       );
     }
 
@@ -1375,6 +1437,157 @@ export const KostStorage = {
     const list = KostStorage.getFinanceCategories();
     const filtered = list.filter((c) => c.id !== id);
     setItem(STORAGE_KEYS.FINANCE_CATEGORIES, filtered);
+    return true;
+  },
+
+  // LEADS & CRM PIPELINE
+  getLeads: (propertyId?: string): Lead[] => {
+    const leads = getItem<Lead[]>(STORAGE_KEYS.LEADS, initialLeads);
+    if (!propertyId) return leads;
+    return leads.filter((l) => l.property_id === propertyId);
+  },
+
+  saveLeads: (leads: Lead[]): void => {
+    setItem(STORAGE_KEYS.LEADS, leads);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("kost_storage_change", { detail: { key: STORAGE_KEYS.LEADS } })
+      );
+    }
+  },
+
+  createLead: (payload: Partial<Lead>): Lead => {
+    const leads = KostStorage.getLeads();
+    const newLead: Lead = {
+      id: payload.id || `lead-${Date.now()}`,
+      property_id: payload.property_id || "a0000000-0000-0000-0000-000000000001",
+      name: payload.name || "Calon Penghuni",
+      phone: payload.phone || "",
+      channel: payload.channel || "whatsapp",
+      landing_page_campaign: payload.landing_page_campaign,
+      preferred_room_type: payload.preferred_room_type,
+      budget_min: payload.budget_min,
+      budget_max: payload.budget_max,
+      preferred_move_in_date: payload.preferred_move_in_date,
+      is_warm: Boolean(payload.is_warm),
+      status: payload.status || "new",
+      assigned_staff_id: payload.assigned_staff_id,
+      assigned_staff_name: payload.assigned_staff_name,
+      follow_up_at: payload.follow_up_at,
+      notes: payload.notes,
+      created_at: payload.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    KostStorage.saveLeads([newLead, ...leads]);
+    return newLead;
+  },
+
+  updateLead: (id: string, updates: Partial<Lead>): Lead => {
+    const leads = KostStorage.getLeads();
+    const index = leads.findIndex((l) => l.id === id);
+    if (index === -1) {
+      return KostStorage.createLead({ ...updates, id });
+    }
+    const updated = {
+      ...leads[index],
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+    leads[index] = updated;
+    KostStorage.saveLeads([...leads]);
+    return updated;
+  },
+
+  deleteLead: (id: string): boolean => {
+    const leads = KostStorage.getLeads();
+    const filtered = leads.filter((l) => l.id !== id);
+    KostStorage.saveLeads(filtered);
+    // Hapus juga survei terkait jika ada
+    const surveys = KostStorage.getSurveys();
+    const filteredSurveys = surveys.filter((s) => s.lead_id !== id);
+    KostStorage.saveSurveys(filteredSurveys);
+    return true;
+  },
+
+  // SURVEY SCHEDULES
+  getSurveys: (propertyId?: string): SurveySchedule[] => {
+    const surveys = getItem<SurveySchedule[]>(STORAGE_KEYS.SURVEYS, initialSurveys);
+    if (!propertyId) return surveys;
+    return surveys.filter((s) => s.property_id === propertyId);
+  },
+
+  saveSurveys: (surveys: SurveySchedule[]): void => {
+    setItem(STORAGE_KEYS.SURVEYS, surveys);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("kost_storage_change", { detail: { key: STORAGE_KEYS.SURVEYS } })
+      );
+    }
+  },
+
+  createSurvey: (payload: Partial<SurveySchedule>): SurveySchedule => {
+    const surveys = KostStorage.getSurveys();
+    const newSurvey: SurveySchedule = {
+      id: payload.id || `survey-${Date.now()}`,
+      property_id: payload.property_id || "a0000000-0000-0000-0000-000000000001",
+      lead_id: payload.lead_id || "",
+      lead_name: payload.lead_name,
+      lead_phone: payload.lead_phone,
+      room_id: payload.room_id,
+      room_number: payload.room_number,
+      scheduled_at: payload.scheduled_at || new Date().toISOString(),
+      status: payload.status || "scheduled",
+      assigned_staff_id: payload.assigned_staff_id,
+      assigned_staff_name: payload.assigned_staff_name,
+      result_notes: payload.result_notes,
+      created_at: payload.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    KostStorage.saveSurveys([newSurvey, ...surveys]);
+
+    // Jika lead masih 'new' atau 'contacted', otomatis majukan ke 'survey_scheduled'
+    if (newSurvey.lead_id) {
+      const lead = KostStorage.getLeads().find((l) => l.id === newSurvey.lead_id);
+      if (
+        lead &&
+        (lead.status === "new" ||
+          lead.status === "contacted" ||
+          lead.status === "follow_up")
+      ) {
+        KostStorage.updateLead(newSurvey.lead_id, { status: "survey_scheduled" });
+      }
+    }
+    return newSurvey;
+  },
+
+  updateSurvey: (id: string, updates: Partial<SurveySchedule>): SurveySchedule => {
+    const surveys = KostStorage.getSurveys();
+    const index = surveys.findIndex((s) => s.id === id);
+    if (index === -1) {
+      return KostStorage.createSurvey({ ...updates, id });
+    }
+    const updated = {
+      ...surveys[index],
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+    surveys[index] = updated;
+    KostStorage.saveSurveys([...surveys]);
+
+    // Jika survey status selesai, otomatis perbarui lead status ke survey_done jika masih survey_scheduled
+    if (updates.status === "completed" && updated.lead_id) {
+      const lead = KostStorage.getLeads().find((l) => l.id === updated.lead_id);
+      if (lead && lead.status === "survey_scheduled") {
+        KostStorage.updateLead(updated.lead_id, { status: "survey_done" });
+      }
+    }
+    return updated;
+  },
+
+  deleteSurvey: (id: string): boolean => {
+    const surveys = KostStorage.getSurveys();
+    const filtered = surveys.filter((s) => s.id !== id);
+    KostStorage.saveSurveys(filtered);
     return true;
   },
 };

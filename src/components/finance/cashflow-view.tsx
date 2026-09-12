@@ -139,7 +139,9 @@ export function CashFlowView({ currentRole = "owner" }: CashFlowViewProps) {
 
     // Wallet Filter
     if (walletFilter !== "all") {
-      const matchWallet = tx.wallet_id === walletFilter || tx.wallet_name?.toLowerCase() === walletFilter.toLowerCase();
+      const matchWallet =
+        tx.wallet_id === walletFilter ||
+        (tx.wallet_name && walletFilter ? tx.wallet_name.toLowerCase() === walletFilter.toLowerCase() : false);
       if (!matchWallet) return false;
     }
 

@@ -10,12 +10,34 @@ export interface Property {
   address: string;
   city: string;
   phone?: string;
+  description?: string;
+  cover_image?: string;
   created_at: string;
+}
+
+export interface RoomType {
+  id: string;
+  property_id: string;
+  name: string;
+  slug?: string;
+  base_price: number;
+  facilities: string[];
+  room_size?: string;
+  description?: string;
+  photos?: string[];
+  is_active?: boolean;
+  display_order?: number;
+  created_at: string;
+  updated_at?: string;
+  // Computed / joined
+  total_rooms?: number;
+  available_rooms?: number;
 }
 
 export interface Room {
   id: string;
   property_id: string;
+  room_type_id?: string;
   room_number: string;
   floor: number;
   room_type: string;
@@ -23,6 +45,8 @@ export interface Room {
   facilities: string[];
   status: RoomStatus;
   notes?: string;
+  description?: string;
+  photos?: string[];
   created_at: string;
   tenant_id?: string; // Foreign Key referencing Tenant.id (Primary Key)
   // Joined fields from Tenant master entity
@@ -219,7 +243,6 @@ export type FeaturePermission =
   | "electricity"
   | "billing"
   | "owner-audit"
-  | "billing-settings"
   | "staff-management"
   | "profile"
   | "leads";

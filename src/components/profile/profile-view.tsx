@@ -284,7 +284,6 @@ export function ProfileView({
                   electricity: "Token Listrik PLN",
                   billing: "Penagihan & Invoice WA",
                   "owner-audit": "Laporan Finansial .XLSX",
-                  "billing-settings": "Pengaturan Rekening Bank",
                   cashflow: "Kas Operasional (Expense & Income)",
                   profile: "Profil & Keamanan",
                 };
