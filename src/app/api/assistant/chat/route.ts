@@ -4,7 +4,7 @@ const BACKEND_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:50
 const DEFAULT_N8N_WEBHOOK =
   process.env.N8N_WEBHOOK_CHATBOT ||
   process.env.NEXT_PUBLIC_N8N_WEBHOOK_CHATBOT ||
-  "https://n8n.noud.web.id/webhook-test/kostChatbotz";
+  "https://n8n.noud.web.id/webhook/kostChatbotz";
 
 function extractReply(data: any): string {
   if (typeof data === "string") return data;

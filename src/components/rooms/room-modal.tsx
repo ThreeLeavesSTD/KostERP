@@ -129,6 +129,9 @@ export function RoomModal({ isOpen, onClose, roomToEdit, onSuccess }: RoomModalP
       if (matched.facilities && matched.facilities.length > 0) {
         setFacilities(matched.facilities);
       }
+      if (matched.description) {
+        setDescription(matched.description);
+      }
     }
   };
 

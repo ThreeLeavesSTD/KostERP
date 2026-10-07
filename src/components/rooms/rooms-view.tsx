@@ -18,7 +18,7 @@ import {
   Bot,
   FileText,
 } from "lucide-react";
-import { Room, RoomStatus, RoomComplaint } from "@/types";
+import { Room, RoomStatus, RoomComplaint, RoomType } from "@/types";
 import { KostApiClient } from "@/lib/api-client";
 import { formatRupiah, getRoomStatusInfo } from "@/lib/utils";
 import { notify } from "@/lib/notify";
@@ -38,9 +38,11 @@ export function RoomsView({
   onNavigateTab,
 }: RoomsViewProps) {
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [roomTypes, setRoomTypes] = useState<RoomType[]>([]);
   const [complaints, setComplaints] = useState<RoomComplaint[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFloor, setSelectedFloor] = useState<number | "all">("all");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<RoomStatus | "with_complaints" | "all">("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [roomToEdit, setRoomToEdit] = useState<Room | null>(null);
@@ -54,12 +56,14 @@ export function RoomsView({
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [r, c] = await Promise.all([
+      const [r, c, rt] = await Promise.all([
         KostApiClient.getRooms(),
         KostApiClient.getComplaints(),
+        KostApiClient.getRoomTypes(),
       ]);
       setRooms(r);
       setComplaints(c);
+      setRoomTypes(rt);
     } catch (err) {
       console.error("Gagal memuat kamar:", err);
     } finally {
@@ -77,13 +81,26 @@ export function RoomsView({
     (c) => c.status === "pending" || c.status === "in_progress"
   );
 
+  const getRoomCategory = (room: Room): RoomType | undefined => {
+    return roomTypes.find(
+      (rt) => rt.id === room.room_type_id || rt.name.toLowerCase() === (room.room_type || "").toLowerCase()
+    );
+  };
+
   const filteredRooms = rooms.filter((r) => {
+    const matchedCategory = getRoomCategory(r);
+    const categoryName = matchedCategory?.name || r.room_type || "";
+
     const matchesSearch =
       r.room_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.room_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      categoryName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       r.current_tenant?.full_name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFloor = selectedFloor === "all" || r.floor === selectedFloor;
-    
+    const matchesCategory =
+      selectedCategory === "all" ||
+      (r.room_type_id && r.room_type_id === selectedCategory) ||
+      categoryName.toLowerCase() === selectedCategory.toLowerCase();
+
     let matchesStatus = true;
     if (selectedStatus === "with_complaints") {
       matchesStatus = complaints.some(
@@ -95,7 +112,7 @@ export function RoomsView({
       matchesStatus = r.status === selectedStatus;
     }
 
-    return matchesSearch && matchesFloor && matchesStatus;
+    return matchesSearch && matchesFloor && matchesCategory && matchesStatus;
   });
 
   const availableCount = rooms.filter((r) => r.status === "available").length;
@@ -315,46 +332,94 @@ export function RoomsView({
         </button>
       </div>
 
-      {/* Search & Floor Capsule Filter Bar */}
-      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between rounded-3xl bg-white p-3 shadow-spatial border border-white/80 dark:bg-[#18181B] dark:border-white/10">
-        {/* Search */}
-        <div className="relative flex-1 w-full">
-          <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-          <input
-            type="text"
-            placeholder="Cari nomor kamar, tipe, atau nama penghuni..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-full border border-neutral-200/80 bg-neutral-50 py-2.5 pl-10 pr-4 text-xs font-medium focus:ring-2 focus:ring-[#0A0A0A] focus:outline-none dark:bg-neutral-800 dark:border-neutral-700 dark:text-white"
-          />
-        </div>
+      {/* Search, Floor & Category Filter Bar */}
+      <div className="flex flex-col gap-3 rounded-3xl bg-white p-3.5 shadow-spatial border border-white/80 dark:bg-[#18181B] dark:border-white/10">
+        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+          {/* Search */}
+          <div className="relative flex-1 w-full">
+            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+            <input
+              type="text"
+              placeholder="Cari nomor kamar, kategori, atau nama penghuni..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full rounded-full border border-neutral-200/80 bg-neutral-50 py-2.5 pl-10 pr-4 text-xs font-medium focus:ring-2 focus:ring-[#0A0A0A] focus:outline-none dark:bg-neutral-800 dark:border-neutral-700 dark:text-white"
+            />
+          </div>
 
-        {/* Floor Filter Capsule */}
-        <div className="flex items-center gap-1.5 rounded-full bg-neutral-100 p-1 dark:bg-neutral-800 shrink-0">
-          <button
-            onClick={() => setSelectedFloor("all")}
-            className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition-all ${
-              selectedFloor === "all"
-                ? "bg-[#0A0A0A] text-white shadow-xs dark:bg-white dark:text-[#0A0A0A]"
-                : "text-neutral-600 hover:text-neutral-900 dark:text-neutral-400"
-            }`}
-          >
-            Semua Lt
-          </button>
-          {floors.map((fl) => (
+          {/* Floor Filter Capsule */}
+          <div className="flex items-center gap-1.5 rounded-full bg-neutral-100 p-1 dark:bg-neutral-800 shrink-0">
             <button
-              key={fl}
-              onClick={() => setSelectedFloor(fl)}
+              onClick={() => setSelectedFloor("all")}
               className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition-all ${
-                selectedFloor === fl
+                selectedFloor === "all"
                   ? "bg-[#0A0A0A] text-white shadow-xs dark:bg-white dark:text-[#0A0A0A]"
                   : "text-neutral-600 hover:text-neutral-900 dark:text-neutral-400"
               }`}
             >
-              Lt {fl}
+              Semua Lt
             </button>
-          ))}
+            {floors.map((fl) => (
+              <button
+                key={fl}
+                onClick={() => setSelectedFloor(fl)}
+                className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition-all ${
+                  selectedFloor === fl
+                    ? "bg-[#0A0A0A] text-white shadow-xs dark:bg-white dark:text-[#0A0A0A]"
+                    : "text-neutral-600 hover:text-neutral-900 dark:text-neutral-400"
+                }`}
+              >
+                Lt {fl}
+              </button>
+            ))}
+          </div>
         </div>
+
+        {/* Category Filter Pills (Menyesuaikan dengan menu Kategori) */}
+        {roomTypes.length > 0 && (
+          <div className="flex items-center gap-1.5 pt-2.5 border-t border-neutral-100 dark:border-white/5 overflow-x-auto hide-scrollbar">
+            <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400 pl-1 shrink-0 flex items-center gap-1">
+              <Layers className="h-3 w-3" /> Kategori:
+            </span>
+            <button
+              onClick={() => setSelectedCategory("all")}
+              className={`rounded-full px-3 py-1 text-xs font-bold transition-all shrink-0 ${
+                selectedCategory === "all"
+                  ? "bg-[#0A0A0A] text-[#D9FF43] shadow-xs dark:bg-white dark:text-[#0A0A0A]"
+                  : "bg-neutral-100 text-neutral-600 hover:text-neutral-900 dark:bg-neutral-800 dark:text-neutral-400"
+              }`}
+            >
+              Semua Kategori ({rooms.length})
+            </button>
+            {roomTypes.map((rt) => {
+              const countInType = rooms.filter(
+                (r) => (r.room_type_id && r.room_type_id === rt.id) || (r.room_type || "").toLowerCase() === rt.name.toLowerCase()
+              ).length;
+              return (
+                <button
+                  key={rt.id}
+                  onClick={() => setSelectedCategory(selectedCategory === rt.id ? "all" : rt.id)}
+                  className={`rounded-full px-3 py-1 text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+                    selectedCategory === rt.id
+                      ? "bg-[#0A0A0A] text-[#D9FF43] shadow-xs dark:bg-white dark:text-[#0A0A0A]"
+                      : "bg-neutral-100 text-neutral-600 hover:text-neutral-900 dark:bg-neutral-800 dark:text-neutral-400"
+                  }`}
+                >
+                  <span>{rt.name}</span>
+                  <span
+                    className={`text-[10px] rounded-full px-1.5 py-0.2 ${
+                      selectedCategory === rt.id
+                        ? "bg-neutral-800 text-[#D9FF43] dark:bg-neutral-200 dark:text-[#0A0A0A]"
+                        : "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-300"
+                    }`}
+                  >
+                    {countInType}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Rooms Bento Grid */}
@@ -373,13 +438,20 @@ export function RoomsView({
           filteredRooms.map((room) => {
             const isOccupied = room.status === "occupied";
             const isAvailable = room.status === "available";
+            const matchedCategory = getRoomCategory(room);
+            const displayCategoryName = matchedCategory?.name || room.room_type;
+            const displayPrice = matchedCategory ? matchedCategory.base_price : room.base_price;
+            const displayFacilities = (matchedCategory?.facilities && matchedCategory.facilities.length > 0)
+              ? matchedCategory.facilities
+              : (room.facilities || []);
+            const displayDescription = matchedCategory?.description || room.description;
 
             return (
               <div
                 key={room.id}
                 className="group relative flex flex-col justify-between overflow-hidden rounded-3xl border border-white/80 bg-white p-5 shadow-spatial transition-all duration-300 hover:shadow-spatial-lg hover:border-neutral-300 dark:bg-[#18181B] dark:border-white/10"
               >
-                {/* Card Top: Room Number & Status Capsule */}
+                {/* Card Top: Room Number, Category Badge & Status Capsule */}
                 <div>
                   <div className="flex items-start justify-between">
                     <div>
@@ -391,7 +463,17 @@ export function RoomsView({
                           Lt {room.floor}
                         </span>
                       </div>
-                      <p className="text-xs font-semibold text-neutral-500 mt-0.5">{room.room_type}</p>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#D9FF43]/20 text-[#254600] dark:bg-neutral-800 dark:text-[#D9FF43] border border-[#D9FF43]/40 dark:border-white/10">
+                          <Layers className="h-3 w-3" />
+                          {displayCategoryName}
+                        </span>
+                        {matchedCategory?.room_size && (
+                          <span className="text-[10px] font-semibold text-neutral-400">
+                            • {matchedCategory.room_size}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <span
@@ -413,18 +495,18 @@ export function RoomsView({
                   </div>
 
                   {/* Price */}
-                  <div className="mt-4">
+                  <div className="mt-3.5">
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">Tarif Sewa</p>
                     <p className="text-lg font-black text-neutral-900 dark:text-white">
-                      {formatRupiah(room.base_price)}
+                      {formatRupiah(displayPrice)}
                       <span className="text-xs font-normal text-neutral-400"> / bulan</span>
                     </p>
                   </div>
 
-                  {/* Public Description Snippet (Landing Page) */}
-                  {room.description && (
+                  {/* Public Description Snippet (Landing Page / Category) */}
+                  {displayDescription && (
                     <p className="mt-2 text-xs font-medium text-neutral-600 dark:text-neutral-400 line-clamp-2 leading-relaxed">
-                      {room.description}
+                      {displayDescription}
                     </p>
                   )}
 
@@ -506,7 +588,7 @@ export function RoomsView({
 
                   {/* Facilities Pills */}
                   <div className="mt-3.5 flex flex-wrap gap-1.5">
-                    {room.facilities?.slice(0, 3).map((f) => (
+                    {displayFacilities.slice(0, 3).map((f) => (
                       <span
                         key={f}
                         className="rounded-full bg-neutral-100 px-2.5 py-0.5 text-[10px] font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
@@ -514,9 +596,9 @@ export function RoomsView({
                         {f}
                       </span>
                     ))}
-                    {room.facilities && room.facilities.length > 3 && (
+                    {displayFacilities.length > 3 && (
                       <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-bold text-neutral-500 dark:bg-neutral-800">
-                        +{room.facilities.length - 3}
+                        +{displayFacilities.length - 3}
                       </span>
                     )}
                   </div>

@@ -62,6 +62,14 @@ export const SupabaseService = {
   async getRooms(propertyId?: string) {
     let query = supabase.from("rooms").select(`
       *,
+      room_types (
+        id,
+        name,
+        base_price,
+        facilities,
+        room_size,
+        description
+      ),
       leases (
         id,
         tenant_id,
@@ -91,18 +99,19 @@ export const SupabaseService = {
     return (data || []).map((room: any) => {
       const activeLease = (room.leases || []).find((l: any) => l.status === "active");
       const tenant = activeLease?.tenants;
+      const rt = room.room_types;
       return {
         id: room.id,
         property_id: room.property_id,
         room_number: room.room_number,
         floor: room.floor,
-        room_type: room.room_type || "Standard",
+        room_type: rt?.name || room.room_type || "Standard",
         room_type_id: room.room_type_id || null,
-        base_price: Number(room.base_price),
-        facilities: room.facilities || [],
+        base_price: rt?.base_price !== undefined ? Number(rt.base_price) : Number(room.base_price),
+        facilities: (rt?.facilities && rt.facilities.length > 0) ? rt.facilities : (room.facilities || []),
         status: room.status,
         notes: room.notes,
-        description: room.description || null,
+        description: rt?.description || room.description || null,
         photos: room.photos || [],
         created_at: room.created_at,
         tenant_id: tenant?.id,
@@ -264,6 +273,14 @@ export const SupabaseService = {
 
     const { data, error } = await supabase.from("room_types").update(updateData).eq("id", id).select().single();
     if (error) throw error;
+
+    // Auto sync room_type name to all connected rooms
+    if (updateData.name) {
+      await supabase.from("rooms").update({
+        room_type: updateData.name,
+      }).eq("room_type_id", id);
+    }
+
     return data;
   },
 

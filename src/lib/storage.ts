@@ -247,8 +247,14 @@ export const KostStorage = {
     const rawRooms = getItem<Room[]>(STORAGE_KEYS.ROOMS, initialRooms);
     const tenants = getItem<Tenant[]>(STORAGE_KEYS.TENANTS, initialTenants);
     const leases = getItem<Lease[]>(STORAGE_KEYS.LEASES, initialLeases);
+    const roomTypes = getItem<RoomType[]>(STORAGE_KEYS.ROOM_TYPES, initialRoomTypes);
 
     return rawRooms.map((room) => {
+      // Resolve matched category
+      const matchedRt = roomTypes.find(
+        (rt) => rt.id === room.room_type_id || rt.name.toLowerCase() === room.room_type?.toLowerCase()
+      );
+
       // Find active lease for this room if any
       const activeLease = leases.find(
         (l) => (l.room_id === room.id || l.room_number === room.room_number) && l.status === "active"
@@ -258,9 +264,18 @@ export const KostStorage = {
       const tenantId = room.tenant_id || activeLease?.tenant_id || room.current_tenant?.id;
       const matchedTenant = tenantId ? tenants.find((t) => t.id === tenantId) : undefined;
 
+      const baseRoom = {
+        ...room,
+        room_type: matchedRt?.name || room.room_type || "Standard",
+        room_type_id: matchedRt?.id || room.room_type_id,
+        base_price: matchedRt ? matchedRt.base_price : room.base_price,
+        facilities: (matchedRt?.facilities && matchedRt.facilities.length > 0) ? matchedRt.facilities : (room.facilities || []),
+        description: matchedRt?.description || room.description,
+      };
+
       if (matchedTenant) {
         return {
-          ...room,
+          ...baseRoom,
           status: room.status === "maintenance" ? "maintenance" : "occupied",
           tenant_id: matchedTenant.id,
           current_tenant: {
@@ -278,10 +293,10 @@ export const KostStorage = {
           },
         };
       } else if (room.status === "occupied" && room.current_tenant) {
-        return room;
+        return baseRoom;
       } else {
         return {
-          ...room,
+          ...baseRoom,
           tenant_id: undefined,
           current_tenant: undefined,
         };
@@ -447,9 +462,22 @@ export const KostStorage = {
     const types = KostStorage.getRoomTypes();
     const index = types.findIndex((t) => t.id === id);
     if (index === -1) return null;
+    const oldName = types[index].name;
     const updated = { ...types[index], ...updates, updated_at: new Date().toISOString() };
     types[index] = updated;
     setItem(STORAGE_KEYS.ROOM_TYPES, [...types]);
+
+    // Auto sync rooms with this category
+    if (updates.name) {
+      const rawRooms = getItem<Room[]>(STORAGE_KEYS.ROOMS, initialRooms);
+      const updatedRooms = rawRooms.map((r) =>
+        r.room_type_id === id || r.room_type?.toLowerCase() === oldName.toLowerCase()
+          ? { ...r, room_type: updates.name!, room_type_id: id }
+          : r
+      );
+      setItem(STORAGE_KEYS.ROOMS, updatedRooms);
+    }
+
     FrontendSupabaseService.updateRoomType(id, updates).catch((err) => console.warn("Supabase room type update sync:", err));
     return updated;
   },

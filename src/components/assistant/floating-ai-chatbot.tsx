@@ -27,6 +27,7 @@ import { formatRupiah, formatDateIndo } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { notify } from "@/lib/notify";
 import { sendChatbotMessageToN8n } from "@/lib/n8n/webhook-client";
+import { AdaptiveMessageContent } from "@/components/assistant/adaptive-card";
 
 interface Message {
   id: string;
@@ -281,12 +282,7 @@ export function FloatingAIChatbot({
     }
   };
 
-  const quickChips = [
-    "Cek kamar kosong",
-    "Tagihan sewa tertunggak",
-    "Laba token listrik",
-    "Ringkasan kas",
-  ];
+
 
   return (
     <>
@@ -406,7 +402,14 @@ export function FloatingAIChatbot({
                           : "bg-[#0A0A0A] text-white dark:bg-white dark:text-[#0A0A0A] font-medium shadow-spatial"
                       }`}
                     >
-                      <div className="whitespace-pre-wrap">{msg.text}</div>
+                      {isAssistant ? (
+                        <AdaptiveMessageContent
+                          content={msg.text}
+                          onNavigateTab={onNavigateTab}
+                        />
+                      ) : (
+                        <div className="whitespace-pre-wrap">{msg.text}</div>
+                      )}
 
                       {/* Interactive Action: Unpaid Invoices */}
                       {msg.actionType === "invoices" && msg.actionData && (
@@ -503,18 +506,6 @@ export function FloatingAIChatbot({
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Quick Chip Prompts */}
-          <div className="px-3 pt-1 pb-2 flex items-center gap-1.5 overflow-x-auto hide-scrollbar shrink-0 border-t border-neutral-100 dark:border-white/5">
-            {quickChips.map((chip, idx) => (
-              <button
-                key={idx}
-                onClick={() => handleUserSubmit(chip)}
-                className="whitespace-nowrap rounded-full bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 px-2.5 py-1 text-[10px] font-bold text-neutral-600 dark:text-neutral-300 transition-colors shrink-0 cursor-pointer"
-              >
-                {chip}
-              </button>
-            ))}
-          </div>
 
           {/* Input Form */}
           <div className="p-3 border-t border-neutral-100 dark:border-white/10 bg-neutral-50/50 dark:bg-[#141417]/50 shrink-0">

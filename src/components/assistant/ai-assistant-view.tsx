@@ -23,6 +23,7 @@ import { formatRupiah, formatDateIndo } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { notify } from "@/lib/notify";
 import { sendChatbotMessageToN8n } from "@/lib/n8n/webhook-client";
+import { AdaptiveMessageContent } from "@/components/assistant/adaptive-card";
 
 interface Message {
   id: string;
@@ -458,9 +459,16 @@ export function AIAssistantView({
                         : "bg-[#0A0A0A] text-white rounded-tr-sm dark:bg-[#202024] dark:border dark:border-neutral-700 self-end"
                     }`}
                   >
-                    <p className="whitespace-pre-wrap leading-relaxed font-medium">
-                      {msg.text}
-                    </p>
+                    {isAssistant ? (
+                      <AdaptiveMessageContent
+                        content={msg.text}
+                        onNavigateTab={onNavigateTab}
+                      />
+                    ) : (
+                      <p className="whitespace-pre-wrap leading-relaxed font-medium">
+                        {msg.text}
+                      </p>
+                    )}
 
                     {/* Interactive Action Card: Vacant Rooms */}
                     {msg.actionType === "rooms" && msg.actionData && (

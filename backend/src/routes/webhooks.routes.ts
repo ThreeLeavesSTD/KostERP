@@ -90,7 +90,7 @@ router.post("/chatbot", async (req: Request, res: Response) => {
 
     const webhookUrl =
       process.env.N8N_WEBHOOK_CHATBOT ||
-      "https://n8n.noud.web.id/webhook-test/kostChatbotz";
+      "https://n8n.noud.web.id/webhook/kostChatbotz";
 
     const trimmedMessage = message.trim();
     const sessionId = session_id || "kost-concierge-web-session";
