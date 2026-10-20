@@ -49,7 +49,7 @@ export function AIAssistantView({
   const [isTestingWebhook, setIsTestingWebhook] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<
     "connected" | "standby" | "disconnected" | "checking" | "warning"
-  >("connected");
+  >("standby");
 
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -160,14 +160,9 @@ export function AIAssistantView({
     setIsTestingWebhook(true);
     setConnectionStatus("checking");
     try {
-      const res = await fetch("/api/assistant/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: "Ping connection test from Kost Concierge ERP",
-        }),
-      });
-      const data = await res.json();
+      const data = await sendChatbotMessageToN8n(
+        "Ping connection test from Kost Concierge ERP"
+      );
       if (data.success) {
         setConnectionStatus("connected");
         notify.success("n8n AI Terhubung", "Workflow n8n aktif dan merespons dengan sukses.");
@@ -374,8 +369,10 @@ export function AIAssistantView({
                 className={`absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-white dark:border-[#0A0A0A] ${
                   connectionStatus === "connected"
                     ? "bg-emerald-500 animate-pulse"
-                    : connectionStatus === "standby"
+                    : connectionStatus === "checking" || connectionStatus === "warning"
                     ? "bg-amber-500"
+                    : connectionStatus === "standby"
+                    ? "bg-neutral-400"
                     : "bg-rose-500"
                 }`}
               />
@@ -390,9 +387,33 @@ export function AIAssistantView({
                   AI OPERASIONAL
                 </span>
               </div>
-              <p className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-wider text-emerald-600 dark:text-emerald-400 uppercase mt-0.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span>ONLINE & TERHUBUNG N8N</span>
+              <p className={`flex items-center gap-1.5 text-[10px] font-extrabold tracking-wider uppercase mt-0.5 ${
+                connectionStatus === "connected"
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : connectionStatus === "checking"
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-neutral-500 dark:text-neutral-400"
+              }`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${
+                  connectionStatus === "connected"
+                    ? "bg-emerald-500 animate-pulse"
+                    : connectionStatus === "checking"
+                    ? "bg-amber-500 animate-pulse"
+                    : connectionStatus === "standby"
+                    ? "bg-neutral-400"
+                    : "bg-rose-500"
+                }`} />
+                <span>{
+                  connectionStatus === "connected"
+                    ? "ONLINE • N8N AI"
+                    : connectionStatus === "checking"
+                    ? "MEMERIKSA KONEKSI..."
+                    : connectionStatus === "standby"
+                    ? "BELUM TERHUBUNG"
+                    : connectionStatus === "warning"
+                    ? "N8N MEMBERI PERINGATAN"
+                    : "N8N TIDAK TERHUBUNG"
+                }</span>
               </p>
             </div>
           </div>

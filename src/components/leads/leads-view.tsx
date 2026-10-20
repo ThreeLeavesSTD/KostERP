@@ -48,6 +48,8 @@ import { formatRupiah, formatDateIndo } from "@/lib/utils";
 import { LeadModal } from "./lead-modal";
 import { SurveyModal } from "./survey-modal";
 import { ConvertToTenantModal } from "./convert-to-tenant-modal";
+import { KostStorage } from "@/lib/storage";
+import { SequentialPipelineFunnel } from "./sequential-pipeline-funnel";
 
 interface LeadsViewProps {
   currentRole?: UserRole;
@@ -148,9 +150,9 @@ function formatDateTimeIndo(dateStr?: string | null): string {
 export function LeadsView({ currentRole }: LeadsViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<"leads" | "surveys">("leads");
   const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [surveys, setSurveys] = useState<SurveySchedule[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [leads, setLeads] = useState<Lead[]>(() => KostStorage.getLeads());
+  const [surveys, setSurveys] = useState<SurveySchedule[]>(() => KostStorage.getSurveys());
+  const [isLoading, setIsLoading] = useState(() => KostStorage.getLeads().length === 0);
 
   // Drag & Drop State
   const [draggedLeadId, setDraggedLeadId] = useState<string | null>(null);
@@ -617,6 +619,9 @@ export function LeadsView({ currentRole }: LeadsViewProps) {
           </Button>
         </div>
       </div>
+
+      {/* Sequential Pipeline Funnel Stream with Traveling Orb and Node Orbit */}
+      <SequentialPipelineFunnel leads={leads} />
 
       {/* 4 Professional CRM Summary Metric Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">

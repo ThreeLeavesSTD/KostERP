@@ -34,6 +34,7 @@ import {
   Settings2,
 } from "lucide-react";
 import { KostApiClient } from "@/lib/api-client";
+import { KostStorage } from "@/lib/storage";
 import { StaffAccount, UserRole, RolePermissionConfig } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +47,12 @@ interface StaffManagementViewProps {
 }
 
 const AVAILABLE_PERMISSIONS = [
+  { id: "finance", name: "Financial Command Center", desc: "KPI keuangan, grafik revenue, biaya, dan aging invoice", icon: LayoutDashboard },
+  { id: "expenses", name: "Expense Tracker", desc: "Catat, edit, hapus, dan ekspor pengeluaran", icon: Receipt },
+  { id: "pnl", name: "Laporan Laba-Rugi", desc: "Pendapatan, beban, laba bersih, dan margin", icon: FileSpreadsheet },
+  { id: "unit-ekonomi", name: "Ekonomi per Kamar", desc: "Revenue, profit, modal, dan ROI tiap kamar", icon: DoorClosed },
+  { id: "budget", name: "Proyeksi & Budgeting", desc: "Budget kategori dan simulasi keuangan", icon: Wallet },
+  { id: "reports", name: "Finance Reports", desc: "Ringkasan otomatis dan ekspor PDF/XLSX", icon: FileSpreadsheet },
   {
     id: "owner-dashboard",
     name: "Dashboard & Analitik Finansial",
@@ -125,8 +132,12 @@ export function StaffManagementView({
   onNavigateTab,
 }: StaffManagementViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<"staff" | "roles">("staff");
-  const [staffList, setStaffList] = useState<StaffAccount[]>([]);
-  const [rolesList, setRolesList] = useState<RolePermissionConfig[]>([]);
+  const [staffList, setStaffList] = useState<StaffAccount[]>(() => {
+    return typeof window !== "undefined" ? KostStorage.getStaffAccounts() : [];
+  });
+  const [rolesList, setRolesList] = useState<RolePermissionConfig[]>(() => {
+    return typeof window !== "undefined" ? KostStorage.getRoles() : [];
+  });
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
 
@@ -215,6 +226,13 @@ export function StaffManagementView({
 
   useEffect(() => {
     loadData();
+
+    const handleStorageChange = () => {
+      setStaffList(KostStorage.getStaffAccounts());
+      setRolesList(KostStorage.getRoles());
+    };
+    window.addEventListener("kost_storage_change", handleStorageChange);
+    return () => window.removeEventListener("kost_storage_change", handleStorageChange);
   }, []);
 
   // Access restriction: strictly owner

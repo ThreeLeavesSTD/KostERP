@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useId, useRef } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,19 +21,34 @@ export function Modal({
   children,
   maxWidth = "lg",
 }: ModalProps) {
+  const titleId = useId();
+  const descriptionId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
+    if (!isOpen) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    const focusable = () => Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]') || []).filter(element => element.getClientRects().length > 0);
+    if (!dialogRef.current?.contains(document.activeElement)) (focusable()[0] || dialogRef.current)?.focus();
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isOpen) onClose();
+      if (e.key === "Escape") onCloseRef.current();
+      if (e.key === "Tab") {
+        const targets = focusable(), first = targets[0], last = targets[targets.length - 1];
+        if (!first) { e.preventDefault(); dialogRef.current?.focus(); }
+        else if (e.shiftKey && (document.activeElement === first || !dialogRef.current?.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && (document.activeElement === last || !dialogRef.current?.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
+      }
     };
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
-      window.addEventListener("keydown", handleKeyDown);
-    }
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.body.style.overflow = "unset";
+      document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
+      if (previousFocus?.isConnected) previousFocus.focus();
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -46,7 +61,7 @@ export function Modal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+    <div className="mobile-modal-overlay fixed inset-0 z-[60] flex items-end justify-center p-3 sm:items-center sm:p-6">
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/50 backdrop-blur-md transition-opacity animate-in fade-in"
@@ -55,26 +70,34 @@ export function Modal({
 
       {/* Content */}
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={description ? descriptionId : undefined}
+        tabIndex={-1}
         className={cn(
-          "relative w-full rounded-3xl bg-white p-6 shadow-2xl transition-all animate-in zoom-in-95 dark:bg-[#141416] border border-neutral-200/80 dark:border-white/10",
+          "relative flex w-full min-w-0 flex-col rounded-3xl border border-neutral-200/80 bg-white p-4 shadow-2xl outline-none transition-all animate-in zoom-in-95 dark:border-white/10 dark:bg-[#141416] sm:p-6",
           maxWidthClasses[maxWidth]
         )}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-neutral-100 pb-4 dark:border-white/10">
-          <div>
-            <h3 className="text-lg font-extrabold tracking-tight text-neutral-900 dark:text-white">{title}</h3>
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-neutral-100 pb-3 dark:border-white/10">
+          <div className="min-w-0">
+            <h3 id={titleId} className="text-lg font-extrabold tracking-tight text-neutral-900 dark:text-white">{title}</h3>
             {description && (
-              <p className="mt-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">{description}</p>
+              <p id={descriptionId} className="mt-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">{description}</p>
             )}
           </div>
           <button
+            type="button"
+            aria-label={`Tutup ${title}`}
             onClick={onClose}
-            className="rounded-full p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200 transition-colors"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="mt-4 max-h-[80vh] overflow-y-auto pr-1">{children}</div>
+        <div className="mt-4 min-h-0 overflow-y-auto overscroll-contain pr-1">{children}</div>
       </div>
     </div>
   );

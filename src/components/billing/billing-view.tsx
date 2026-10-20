@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { Invoice, InvoiceStatus } from "@/types";
 import { KostApiClient } from "@/lib/api-client";
+import { KostStorage } from "@/lib/storage";
 import { formatRupiah, formatDateIndo } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { notify } from "@/lib/notify";
@@ -32,8 +33,17 @@ import { InvoiceFormModal } from "./invoice-form-modal";
 import { InvoiceReminderModal } from "./invoice-reminder-modal";
 import { InvoiceDetailModal } from "./invoice-detail-modal";
 import { BroadcastReminderModal } from "./broadcast-reminder-modal";
+import { InvoiceMobileList } from "./invoice-mobile-list";
+import { FinancePropertyPicker, useFinanceWorkspace } from "@/lib/finance-workspace-context";
+import { invoicePaymentSummary } from "@/lib/finance";
+
+function normalizedInvoice(invoice: Invoice): Invoice {
+  const summary = invoicePaymentSummary(invoice);
+  return { ...invoice, status: summary.settled ? "paid" : invoice.due_date < new Date().toISOString().slice(0, 10) ? "overdue" : "unpaid" };
+}
 
 export function BillingView() {
+  const { activePropertyId } = useFinanceWorkspace();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTab, setSelectedTab] = useState<InvoiceStatus | "all">("all");
@@ -51,10 +61,11 @@ export function BillingView() {
   const [isLoading, setIsLoading] = useState(true);
 
   const loadData = async () => {
+    if (!activePropertyId) { setInvoices([]); setIsLoading(false); return; }
     setIsLoading(true);
     try {
-      const data = await KostApiClient.getInvoices();
-      setInvoices(data);
+      const data = await KostApiClient.getInvoices(activePropertyId);
+      setInvoices(data.filter(invoice => invoice.property_id === activePropertyId).map(normalizedInvoice));
     } catch (err) {
       console.error("Gagal memuat invoice:", err);
     } finally {
@@ -63,8 +74,15 @@ export function BillingView() {
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    setInvoices(KostStorage.getInvoices().filter(invoice => invoice.property_id === activePropertyId).map(normalizedInvoice));
+    void loadData();
+
+    const handleStorageChange = () => {
+      setInvoices(KostStorage.getInvoices().filter(invoice => invoice.property_id === activePropertyId).map(normalizedInvoice));
+    };
+    window.addEventListener("kost_storage_change", handleStorageChange);
+    return () => window.removeEventListener("kost_storage_change", handleStorageChange);
+  }, [activePropertyId]);
 
   const filteredInvoices = invoices.filter((inv) => {
     const q = searchQuery.toLowerCase();
@@ -77,18 +95,18 @@ export function BillingView() {
     return matchesSearch && matchesStatus;
   });
 
-  const unpaidInvoices = invoices.filter((i) => i.status === "unpaid" || i.status === "overdue");
+  const unpaidInvoices = invoices.filter((i) => invoicePaymentSummary(i).outstanding > 0);
   const unpaidCount = invoices.filter((i) => i.status === "unpaid").length;
   const overdueCount = invoices.filter((i) => i.status === "overdue").length;
   const paidCount = invoices.filter((i) => i.status === "paid").length;
 
-  const totalUnpaidNominal = unpaidInvoices.reduce((s, i) => s + i.total_amount, 0);
+  const totalUnpaidNominal = unpaidInvoices.reduce((s, i) => s + invoicePaymentSummary(i).outstanding, 0);
   const totalRemindersDispatched = invoices.reduce((s, i) => s + (i.reminder_count || 0), 0);
 
   const handleBatchGenerateInvoices = async () => {
     try {
       const allLeases = await KostApiClient.getLeases();
-      const activeLeases = allLeases.filter((l) => l.status === "active");
+      const activeLeases = allLeases.filter((l) => l.property_id === activePropertyId && l.status === "active");
       const currentMonth = new Date().toISOString().slice(0, 7);
       let createdCount = 0;
 
@@ -105,6 +123,7 @@ export function BillingView() {
           dueDate.setDate(dueDate.getDate() + 5);
 
           await KostApiClient.createInvoice({
+            property_id: activePropertyId,
             lease_id: lease.id,
             invoice_number: invNum,
             billing_period: currentMonth,
@@ -166,7 +185,7 @@ export function BillingView() {
       {/* Top Header & Actions */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-2xl font-black tracking-tight text-neutral-900 dark:text-white">
               Penagihan Sewa & Invoice Digital
             </h2>
@@ -179,7 +198,8 @@ export function BillingView() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-center">
+          <FinancePropertyPicker className="w-full sm:w-auto" />
           {unpaidInvoices.length > 0 && (
             <Button
               onClick={() => setIsBroadcastModalOpen(true)}
@@ -276,8 +296,8 @@ export function BillingView() {
       </div>
 
       {/* Filter Tabs & Search Bar */}
-      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between rounded-3xl bg-white p-3 shadow-spatial border border-white/80 dark:bg-[#18181B] dark:border-white/10">
-        <div className="flex items-center gap-1.5 rounded-full bg-neutral-100 p-1 dark:bg-neutral-800 overflow-x-auto shrink-0">
+      <div className="flex min-w-0 flex-col gap-3 items-center justify-between rounded-3xl bg-white p-3 shadow-spatial border border-white/80 dark:bg-[#18181B] dark:border-white/10 sm:flex-row sm:flex-wrap">
+        <div className="flex w-full max-w-full items-center gap-1.5 rounded-full bg-neutral-100 p-1 dark:bg-neutral-800 overflow-x-auto sm:w-auto">
           {[
             { id: "all", label: `Semua (${invoices.length})` },
             { id: "unpaid", label: `Belum Bayar (${unpaidCount})` },
@@ -302,6 +322,7 @@ export function BillingView() {
           <Search className="absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400" />
           <input
             type="text"
+            aria-label="Cari tagihan"
             placeholder="Cari no faktur, kamar, atau nama penghuni..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -311,7 +332,8 @@ export function BillingView() {
       </div>
 
       {/* Invoice Data Table */}
-      <div className="overflow-hidden rounded-3xl border border-white/80 bg-white shadow-spatial dark:bg-[#18181B] dark:border-white/10">
+      <InvoiceMobileList invoices={filteredInvoices} loading={isLoading} onDetail={setSelectedInvoiceForDetail} onReminder={setSelectedInvoiceForReminder} onVerify={setSelectedInvoiceForVerify} onEdit={invoice => { setInvoiceToEdit(invoice); setIsFormModalOpen(true); }} onDelete={handleDeleteInvoice} />
+      <div className="hidden overflow-hidden rounded-3xl border border-white/80 bg-white shadow-spatial dark:bg-[#18181B] dark:border-white/10 sm:block">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="border-b border-neutral-100 bg-neutral-50/80 text-[11px] font-bold uppercase tracking-wider text-neutral-500 dark:bg-neutral-800/60 dark:border-white/10">
@@ -398,6 +420,7 @@ export function BillingView() {
                         <p className="text-sm font-black text-neutral-900 dark:text-white">
                           {formatRupiah(inv.total_amount)}
                         </p>
+                        {invoicePaymentSummary(inv).paid > 0 && invoicePaymentSummary(inv).outstanding > 0 && <p className="mt-1 text-[10px] text-neutral-500">Sisa {formatRupiah(invoicePaymentSummary(inv).outstanding)}</p>}
                       </td>
 
                       {/* Status & Reminder Tracker */}
@@ -419,6 +442,13 @@ export function BillingView() {
                             />
                             {isPaid ? "Lunas" : isOverdue ? "Jatuh Tempo" : "Belum Bayar"}
                           </span>
+
+                          {/* Contextual Status Reason */}
+                          {isOverdue && (
+                            <span className="block text-[10px] font-semibold text-rose-600 dark:text-rose-400">
+                              Lewat jatuh tempo {formatDateIndo(inv.due_date)}
+                            </span>
+                          )}
 
                           {/* Reminder History Indicator */}
                           {inv.reminder_count && inv.reminder_count > 0 ? (
@@ -512,6 +542,7 @@ export function BillingView() {
         isOpen={isFormModalOpen}
         onClose={() => setIsFormModalOpen(false)}
         invoiceToEdit={invoiceToEdit}
+        propertyId={activePropertyId}
         onSuccess={loadData}
       />
 

@@ -12,6 +12,152 @@ export type Database = {
   }
   public: {
     Tables: {
+      expenses: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string
+          date: string
+          id: string
+          notes: string | null
+          payment_method: string
+          property_id: string
+          recorded_by: string
+          room_id: string | null
+          title: string
+          wallet_id: string | null
+        }
+        Insert: {
+          amount: number
+          category: string
+          created_at?: string
+          date?: string
+          id?: string
+          notes?: string | null
+          payment_method?: string
+          property_id: string
+          recorded_by?: string
+          room_id?: string | null
+          title: string
+          wallet_id?: string | null
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string
+          date?: string
+          id?: string
+          notes?: string | null
+          payment_method?: string
+          property_id?: string
+          recorded_by?: string
+          room_id?: string | null
+          title?: string
+          wallet_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_directory"
+            referencedColumns: ["room_id"]
+          },
+          {
+            foreignKeyName: "expenses_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "finance_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_budgets: {
+        Row: {
+          amount: number
+          category: string
+          id: string
+          month: string
+          property_id: string
+        }
+        Insert: {
+          amount: number
+          category: string
+          id?: string
+          month: string
+          property_id: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          id?: string
+          month?: string
+          property_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_budgets_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      room_investments: {
+        Row: {
+          amount: number
+          property_id: string
+          room_id: string
+        }
+        Insert: {
+          amount: number
+          property_id: string
+          room_id: string
+        }
+        Update: {
+          amount?: number
+          property_id?: string
+          room_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_investments_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_investments_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: true
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_investments_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: true
+            referencedRelation: "tenant_directory"
+            referencedColumns: ["room_id"]
+          },
+        ]
+      }
       cash_transactions: {
         Row: {
           amount: number
@@ -26,6 +172,7 @@ export type Database = {
           property_id: string
           receipt_url: string | null
           recorded_by: string | null
+          room_id: string | null
           title: string
           type: string
           wallet_id: string | null
@@ -44,6 +191,7 @@ export type Database = {
           property_id: string
           receipt_url?: string | null
           recorded_by?: string | null
+          room_id?: string | null
           title: string
           type: string
           wallet_id?: string | null
@@ -62,6 +210,7 @@ export type Database = {
           property_id?: string
           receipt_url?: string | null
           recorded_by?: string | null
+          room_id?: string | null
           title?: string
           type?: string
           wallet_id?: string | null
@@ -81,6 +230,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "properties"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_transactions_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_transactions_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_directory"
+            referencedColumns: ["room_id"]
           },
           {
             foreignKeyName: "cash_transactions_wallet_id_fkey"
@@ -452,6 +615,7 @@ export type Database = {
           payment_method: string
           proof_url: string | null
           verified_by: string | null
+          wallet_id: string | null
         }
         Insert: {
           amount_paid: number
@@ -463,6 +627,7 @@ export type Database = {
           payment_method: string
           proof_url?: string | null
           verified_by?: string | null
+          wallet_id?: string | null
         }
         Update: {
           amount_paid?: number
@@ -474,6 +639,7 @@ export type Database = {
           payment_method?: string
           proof_url?: string | null
           verified_by?: string | null
+          wallet_id?: string | null
         }
         Relationships: [
           {
@@ -481,6 +647,46 @@ export type Database = {
             columns: ["invoice_id"]
             isOneToOne: false
             referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "finance_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      property_memberships: {
+        Row: {
+          created_at: string
+          property_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          property_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          property_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "property_memberships_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "property_memberships_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
         ]

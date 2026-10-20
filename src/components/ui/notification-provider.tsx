@@ -74,7 +74,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       {/* TOAST NOTIFICATION CONTAINER */}
       <div
         aria-live="polite"
-        className="pointer-events-none fixed top-4 right-4 z-[9999] flex flex-col gap-2.5 max-w-sm w-full sm:max-w-md px-4 sm:px-0"
+        className="pointer-events-none fixed inset-x-3 top-3 z-[9999] flex w-auto flex-col gap-2.5 sm:left-auto sm:right-4 sm:top-4 sm:w-full sm:max-w-md"
       >
         {toasts.map((toast) => (
           <div
@@ -120,7 +120,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
               {/* Close Button */}
               <button
                 onClick={() => notify.removeToast(toast.id)}
-                className="shrink-0 rounded-lg p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200 transition-colors"
+                aria-label="Tutup pemberitahuan"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200 transition-colors sm:h-7 sm:w-7"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -155,7 +156,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           />
 
           {/* Modal Box */}
-          <div className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-[0_25px_70px_rgba(0,0,0,0.35)] border border-neutral-200/80 transition-all animate-in zoom-in-95 duration-200 dark:bg-[#121214] dark:border-white/10">
+          <div className="relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-3xl bg-white shadow-[0_25px_70px_rgba(0,0,0,0.35)] border border-neutral-200/80 transition-all animate-in zoom-in-95 duration-200 dark:bg-[#121214] dark:border-white/10">
             {/* Top Glowing Gradient Accent */}
             <div
               className={cn(
@@ -281,7 +282,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           />
 
           {/* Modal Box */}
-          <div className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-[0_25px_70px_rgba(0,0,0,0.35)] border border-neutral-200/80 transition-all animate-in zoom-in-95 duration-200 dark:bg-[#121214] dark:border-white/10 text-center">
+          <div className="relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-3xl bg-white shadow-[0_25px_70px_rgba(0,0,0,0.35)] border border-neutral-200/80 transition-all animate-in zoom-in-95 duration-200 dark:bg-[#121214] dark:border-white/10 text-center">
             {/* Top Colored Bar */}
             <div
               className={cn(

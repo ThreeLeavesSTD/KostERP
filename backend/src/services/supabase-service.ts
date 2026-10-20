@@ -34,6 +34,52 @@ export const SupabaseService = {
     return data;
   },
 
+  async getOwnerProperties(userId: string) {
+    const { data: memberships, error: membershipError } = await supabase
+      .from("property_memberships")
+      .select("property_id")
+      .eq("user_id", userId);
+    if (membershipError) throw membershipError;
+    const propertyIds = [...new Set((memberships || []).map((row: { property_id: string }) => row.property_id))];
+    if (!propertyIds.length) return [];
+    const { data, error } = await supabase.from("properties").select("*").in("id", propertyIds).order("created_at", { ascending: true });
+    if (error) throw error;
+    return data || [];
+  },
+
+  async addOwnerPropertyMembership(userId: string, propertyId: string) {
+    const { error } = await supabase.from("property_memberships").upsert({ user_id: userId, property_id: propertyId }, { onConflict: "user_id,property_id" });
+    if (error) throw error;
+  },
+
+  async createPropertyForOwner(payload: { name: string; address: string; city?: string; phone?: string; description?: string }, userId: string) {
+    const { data, error } = await supabase.from("properties").insert(payload).select().single();
+    if (error) throw error;
+    const { error: membershipError } = await supabase.from("property_memberships").insert({ user_id: userId, property_id: data.id });
+    if (membershipError) {
+      await supabase.from("properties").delete().eq("id", data.id);
+      throw membershipError;
+    }
+    return data;
+  },
+
+  async ownerCanAccessProperty(userId: string, propertyId: string) {
+    const { data, error } = await supabase
+      .from("property_memberships")
+      .select("property_id")
+      .eq("user_id", userId)
+      .eq("property_id", propertyId)
+      .maybeSingle();
+    if (error) throw error;
+    return !!data;
+  },
+
+  async getInvoicePropertyId(invoiceId: string) {
+    const { data, error } = await supabase.from("invoices").select("property_id").eq("id", invoiceId).maybeSingle();
+    if (error) throw error;
+    return data?.property_id as string | undefined;
+  },
+
   async getPropertyById(id: string) {
     const { data, error } = await supabase.from("properties").select("*").eq("id", id).single();
     if (error) throw error;
@@ -496,6 +542,7 @@ export const SupabaseService = {
         invoice_id: p.invoice_id,
         amount_paid: Number(p.amount_paid),
         payment_method: p.payment_method,
+        wallet_id: p.wallet_id || null,
         proof_url: p.proof_url,
         verified_by: p.verified_by,
         paid_at: p.paid_at,
@@ -543,16 +590,38 @@ export const SupabaseService = {
   async recordPayment(payload: {
     invoice_id: string;
     amount_paid: number;
-    payment_method: string;
+    wallet_id: string;
     proof_url?: string;
     verified_by?: string;
     notes?: string;
     id?: string;
   }) {
+    const amountPaid = Number(payload.amount_paid);
+    if (!Number.isFinite(amountPaid) || amountPaid <= 0 || !isValidUUID(payload.invoice_id) || !isValidUUID(payload.wallet_id)) {
+      throw new Error("Pilih invoice, wallet, dan nominal pembayaran yang valid.");
+    }
+    const { data: invoice, error: invoiceError } = await supabase
+      .from("invoices")
+      .select("id, property_id, total_amount")
+      .eq("id", payload.invoice_id)
+      .maybeSingle();
+    if (invoiceError) throw invoiceError;
+    if (!invoice) throw new Error("Invoice tidak ditemukan.");
+    const { data: wallet, error: walletError } = await supabase
+      .from("finance_wallets")
+      .select("id, property_id, name, wallet_kind")
+      .eq("id", payload.wallet_id)
+      .maybeSingle();
+    if (walletError) throw walletError;
+    if (!wallet || wallet.property_id !== invoice.property_id || wallet.wallet_kind === "liability") {
+      throw new Error("Wallet harus berupa rekening kas milik properti pada invoice.");
+    }
+
     const insertObj: any = {
       invoice_id: payload.invoice_id,
-      amount_paid: Number(payload.amount_paid),
-      payment_method: payload.payment_method,
+      amount_paid: amountPaid,
+      wallet_id: wallet.id,
+      payment_method: wallet.name,
       proof_url: payload.proof_url || null,
       verified_by: payload.verified_by || "Admin",
       notes: payload.notes || null,
@@ -563,16 +632,6 @@ export const SupabaseService = {
 
     const { data: payment, error: pError } = await supabase.from("payments").insert(insertObj).select().single();
     if (pError) throw pError;
-
-    // Check if total payments cover invoice total amount
-    const { data: allPayments } = await supabase.from("payments").select("amount_paid").eq("invoice_id", payload.invoice_id);
-    const totalPaid = (allPayments || []).reduce((sum, p) => sum + Number(p.amount_paid), 0);
-
-    const { data: invoice } = await supabase.from("invoices").select("total_amount").eq("id", payload.invoice_id).single();
-    if (invoice && totalPaid >= Number(invoice.total_amount)) {
-      await supabase.from("invoices").update({ status: "paid" }).eq("id", payload.invoice_id);
-    }
-
     return payment;
   },
 

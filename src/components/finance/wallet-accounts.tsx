@@ -1,0 +1,27 @@
+"use client";
+
+import { useState, type FormEvent } from "react";
+import { Plus, Pencil } from "lucide-react";
+import { Modal } from "@/components/ui/modal";
+import type { FinanceWallet } from "@/types";
+import { walletBalances, walletCategoryLabel, type FinanceData } from "@/lib/finance";
+import { FinanceApi } from "@/lib/finance-api";
+import { formatRupiah, formatRupiahInput, parseRupiahInput } from "@/lib/utils";
+import { notify } from "@/lib/notify";
+import { inputClass, primaryButton, secondaryButton } from "./finance-ui";
+
+export function WalletAccounts({ data, propertyId, enabled }: { data: FinanceData; propertyId: string; enabled: boolean }) {
+  const { wallets, unassigned } = walletBalances(data);
+  const [open, setOpen] = useState(false), [walletsOpen, setWalletsOpen] = useState(true), [editing, setEditing] = useState<FinanceWallet | null>(null), [name, setName] = useState(""), [balance, setBalance] = useState(0), [type, setType] = useState<FinanceWallet["type"]>("cash"), [account, setAccount] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const edit = (wallet?: FinanceWallet) => { setEditing(wallet || null); setName(wallet?.name || ""); setBalance(wallet?.initial_balance || 0); setType(wallet?.type || "cash"); setAccount(wallet?.account_number || ""); setError(""); setOpen(true); };
+  const save = async (e: FormEvent) => {
+    e.preventDefault(); if (!enabled || busy) return; setBusy(true); setError("");
+    try { await FinanceApi.saveWallet({ property_id: propertyId, name, initial_balance: balance, type, wallet_kind: "asset", account_number: account.trim(), is_default: editing?.is_default || !wallets.length }, editing?.id); setOpen(false); notify.success("Rekening tersimpan"); }
+    catch (e) { setError((e as { message?: string }).message || "Rekening gagal disimpan."); }
+    finally { setBusy(false); }
+  };
+  return <>
+    <details className="rounded-2xl border border-white/10 bg-[#13161b] p-4 sm:p-5" open={walletsOpen} onToggle={event => setWalletsOpen(event.currentTarget.open)}><summary className="min-h-11 cursor-pointer text-sm font-semibold text-white">Saldo per Wallet <span className="ml-2 text-xs font-normal text-neutral-500">{wallets.length} rekening · saldo dihitung dari saldo awal dan transaksi</span></summary><div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{wallets.map(w => <div key={w.id} className="flex min-w-0 items-start justify-between gap-2 rounded-xl border border-white/10 p-4"><div className="min-w-0 break-words"><div className="flex flex-wrap items-center gap-2"><p className="text-xs text-neutral-400">{w.name}</p><span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-neutral-400">{walletCategoryLabel(w)}</span></div><p className="mt-2 text-lg font-semibold text-white">{formatRupiah(w.balance)}</p><p className="mt-1 text-[10px] text-neutral-500">Saldo sekarang · saldo awal {formatRupiah(w.initial_balance)}</p></div><button aria-label={`Edit rekening ${w.name}`} disabled={!enabled} onClick={() => edit(w)} className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-neutral-500 hover:text-[#D9FF43]"><Pencil size={14} /></button></div>)}</div>{unassigned !== 0 && <p className="mt-3 text-xs text-orange-200">Mutasi tanpa alokasi rekening: {formatRupiah(unassigned)}. Edit transaksi lama untuk memilih rekening; total saldo tetap memasukkannya.</p>}<button className={`${secondaryButton} mt-4`} disabled={!enabled} onClick={() => edit()}><Plus size={14} />Tambah Rekening</button></details>
+    {open && <Modal isOpen onClose={() => !busy && setOpen(false)} title={editing ? "Edit Rekening Kas" : "Tambah Rekening Kas"} description="Saldo awal adalah saldo sebelum transaksi mulai dicatat."><form onSubmit={save} className="space-y-4"><label className="block text-xs text-neutral-400">Nama rekening<input required maxLength={80} value={name} placeholder="Contoh: Kas Tunai atau BCA Operasional" onChange={e => setName(e.target.value)} className={`${inputClass} mt-1.5`} /></label><div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><label className="text-xs text-neutral-400">Jenis rekening<select value={type} onChange={e => setType(e.target.value as FinanceWallet["type"])} className={`${inputClass} mt-1.5`}><option value="cash">Kas Tunai</option><option value="bank">Bank</option><option value="ewallet">E-Wallet</option><option value="other">Lainnya</option></select></label><label className="text-xs text-neutral-400">Saldo awal (Rp)<input required type="text" inputMode="numeric" placeholder="0" value={formatRupiahInput(balance)} onChange={e => setBalance(parseRupiahInput(e.target.value))} className={`${inputClass} mt-1.5`} /></label></div><label className="block text-xs text-neutral-400">Nomor rekening (opsional)<input maxLength={50} value={account} onChange={e => setAccount(e.target.value)} className={`${inputClass} mt-1.5`} /></label><p className="text-xs leading-relaxed text-neutral-500">Saldo awal tidak dihitung sebagai pendapatan. Perubahan saldo awal akan mengubah saldo kas di dashboard.</p>{error && <p role="alert" className="text-xs text-red-300">{error}</p>}<div className="flex justify-end gap-2"><button type="button" disabled={busy} className={secondaryButton} onClick={() => setOpen(false)}>Batal</button><button disabled={!enabled || busy} className={primaryButton}>{busy ? "Menyimpan..." : "Simpan Rekening"}</button></div></form></Modal>}
+  </>;
+}

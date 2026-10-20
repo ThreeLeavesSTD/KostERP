@@ -19,6 +19,18 @@ export function formatRupiah(amount: number | null | undefined): string {
   }).format(amount);
 }
 
+/** Format a whole-rupiah input with Indonesian thousand separators (e.g. 1.000.000). */
+export function formatRupiahInput(amount: number | null | undefined): string {
+  if (amount === null || amount === undefined || !Number.isFinite(amount) || amount === 0) return "";
+  return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(amount);
+}
+
+/** Parse a formatted Rupiah input while keeping only its numeric digits. */
+export function parseRupiahInput(value: string): number {
+  const digits = value.replace(/\D/g, "");
+  return digits ? Number(digits) : 0;
+}
+
 /**
  * Format Date string into Indonesian localized date (e.g. 26 Agu 2026)
  */

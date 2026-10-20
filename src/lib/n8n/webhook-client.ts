@@ -1,4 +1,5 @@
 import { formatRupiah, formatTokenPLN } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 
 export interface DispatchTokenPayload {
   tenant_name: string;
@@ -209,6 +210,27 @@ export async function sendChatbotMessageToN8n(
   context?: Record<string, unknown>
 ): Promise<ChatbotWebhookResponse> {
   try {
+    // A separate session per account and browser tab keeps chat memory isolated.
+    let userId = "anonymous";
+    if (typeof window !== "undefined") {
+      try {
+        const { data } = await createClient().auth.getSession();
+        userId = data.session?.user.id || userId;
+      } catch {
+        // The anonymous session still gets its own browser tab ID.
+      }
+    }
+    const sessionKey = `kost_ai_session:${userId}`;
+    let sessionId: string = crypto.randomUUID();
+    if (typeof window !== "undefined") {
+      try {
+        sessionId = sessionStorage.getItem(sessionKey) || sessionId;
+        sessionStorage.setItem(sessionKey, sessionId);
+      } catch {
+        // A fresh request ID is safe when browser storage is unavailable.
+      }
+    }
+
     const response = await fetch("/api/assistant/chat", {
       method: "POST",
       headers: {
@@ -217,6 +239,7 @@ export async function sendChatbotMessageToN8n(
       body: JSON.stringify({
         message,
         context,
+        session_id: `${userId}:${sessionId}`,
       }),
     });
 

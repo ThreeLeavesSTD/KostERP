@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   TrendingUp,
   TrendingDown,
@@ -30,9 +30,11 @@ import {
   HelpCircle,
   SlidersHorizontal,
 } from "lucide-react";
-import { OwnerDashboardMetrics, Room, Lease, Invoice, Tenant, CashTransaction, ElectricityTransaction } from "@/types";
-import { KostApiClient } from "@/lib/api-client";
-import { KostStorage } from "@/lib/storage";
+import { useAuth } from "@/lib/auth-context";
+import { financeLanding } from "@/lib/permissions";
+import { financeEntries, financeKpis, localDate, monthLabel, ownerCashflow, receivables } from "@/lib/finance";
+import { useFinanceData } from "@/components/finance/use-finance-data";
+import { FinancePropertyPicker, useFinanceWorkspace } from "@/lib/finance-workspace-context";
 import { formatRupiah, formatDateIndo } from "@/lib/utils";
 import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
@@ -60,236 +62,41 @@ interface OwnerDashboardViewProps {
 }
 
 export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
-  // Initialize with local KostStorage immediately to guarantee instant render without blank screen
-  const [metrics, setMetrics] = useState<OwnerDashboardMetrics>(() => KostStorage.getOwnerMetrics());
-  const [rooms, setRooms] = useState<Room[]>(() => KostStorage.getRooms());
-  const [leases, setLeases] = useState<Lease[]>(() => KostStorage.getLeases());
-  const [invoices, setInvoices] = useState<Invoice[]>(() => KostStorage.getInvoices());
-  const [tenants, setTenants] = useState<Tenant[]>(() => KostStorage.getTenants());
-  const [cashTransactions, setCashTransactions] = useState<CashTransaction[]>(() => KostStorage.getCashTransactions());
-  const [electricityTransactions, setElectricityTransactions] = useState<ElectricityTransaction[]>(() => KostStorage.getElectricityTransactions());
-  const [propertyInfo, setPropertyInfo] = useState<{ name: string; address?: string; city?: string }>(() => {
-    const props = KostStorage.getProperties();
-    return props.length > 0
-      ? { name: props[0].name, address: props[0].address, city: props[0].city }
-      : { name: "Kost Putri Graha Asri", address: "Margonda, Depok" };
-  });
-  const [isLoading, setIsLoading] = useState(false);
-
-  // Timeframe selector for charts
+  const { profile, role } = useAuth();
+  const { activeProperty, activePropertyId: propertyId } = useFinanceWorkspace();
+  const financeTab = financeLanding(profile?.role || role, profile?.permissions);
+  const propertyInfo = activeProperty || { name: "Properti Kost", address: "", city: "" };
+  const { data, loading, local, error, refresh } = useFinanceData(propertyId);
+  const { rooms, leases, invoices } = data;
+  const electricityTransactions = data.electricity || [];
+  const entries = financeEntries(data);
+  const currentMonthKey = localDate().slice(0, 7);
+  const currentKpis = financeKpis(data, entries, currentMonthKey);
+  const currentMonthData = { income: currentKpis.revenue, expense: currentKpis.costs, count: currentKpis.rows.length };
+  const ar = receivables(invoices);
+  const occupiedRooms = rooms.filter(r => r.status === "occupied").length;
+  const metrics = {
+    totalRooms: rooms.length, occupiedRooms,
+    availableRooms: rooms.filter(r => r.status === "available").length,
+    maintenanceRooms: rooms.filter(r => r.status === "maintenance").length,
+    occupancyRate: rooms.length ? Math.round(occupiedRooms / rooms.length * 100) : 0,
+    currentMonthRevenue: currentKpis.revenue,
+    targetMonthlyRevenue: rooms.reduce((t, r) => t + Number(r.base_price || 0), 0),
+    totalUnpaidAmount: ar.total,
+    unpaidInvoicesCount: invoices.filter(i => receivables([i]).total > 0).length,
+    recentPayments: entries.filter(e => e.type === "income" && e.date.slice(0, 10) <= localDate()).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5).map(e => {
+      const room = rooms.find(r => r.id === e.room_id);
+      return { id: e.id, invoice_number: e.title, room_number: room?.room_number || "Bersama", tenant_name: room?.current_tenant?.full_name || e.category, amount: e.amount, payment_method: data.wallets.find(w => w.id === e.wallet_id)?.name || e.payment_method || "—", paid_at: e.date };
+    }),
+  };
   const [cashflowTimeframe, setCashflowTimeframe] = useState<"6m" | "1y" | "30d">("6m");
   const [tenantMetricView, setTenantMetricView] = useState<"occupancy" | "types">("occupancy");
-
-  const loadData = async () => {
-    // 1. Sync immediately from local single source of truth
-    const mLocal = KostStorage.getOwnerMetrics();
-    const rLocal = KostStorage.getRooms();
-    const lLocal = KostStorage.getLeases();
-    const invLocal = KostStorage.getInvoices();
-    const tLocal = KostStorage.getTenants();
-    const cashLocal = KostStorage.getCashTransactions();
-    const elecLocal = KostStorage.getElectricityTransactions();
-    const propsLocal = KostStorage.getProperties();
-
-    setMetrics(mLocal);
-    setRooms(rLocal);
-    setLeases(lLocal);
-    setInvoices(invLocal);
-    setTenants(tLocal);
-    setCashTransactions(cashLocal);
-    setElectricityTransactions(elecLocal);
-    if (propsLocal.length > 0) {
-      setPropertyInfo({
-        name: propsLocal[0].name,
-        address: propsLocal[0].address,
-        city: propsLocal[0].city,
-      });
-    }
-
-    // 2. Fetch from backend API if available
-    try {
-      const [m, r, l, inv, t, cash, elec, props] = await Promise.all([
-        KostApiClient.getDashboardSummary().catch(() => null),
-        KostApiClient.getRooms().catch(() => null),
-        KostApiClient.getLeases().catch(() => null),
-        KostApiClient.getInvoices().catch(() => null),
-        KostApiClient.getTenants().catch(() => null),
-        KostApiClient.getCashTransactions().catch(() => null),
-        KostApiClient.getElectricityTransactions().catch(() => null),
-        KostApiClient.getProperties().catch(() => null),
-      ]);
-      if (m) setMetrics(m);
-      if (r && r.length > 0) setRooms(r);
-      if (l && l.length > 0) setLeases(l);
-      if (inv && inv.length > 0) setInvoices(inv);
-      if (t && t.length > 0) setTenants(t);
-      if (cash && cash.length > 0) setCashTransactions(cash);
-      if (elec && elec.length > 0) setElectricityTransactions(elec);
-      if (props && props.length > 0) {
-        setPropertyInfo({
-          name: props[0].name,
-          address: props[0].address,
-          city: props[0].city,
-        });
-      }
-    } catch {
-      // Backend not running; local storage state is active
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-    const handleStorageChange = () => loadData();
-    window.addEventListener("kost_storage_change", handleStorageChange);
-    return () => window.removeEventListener("kost_storage_change", handleStorageChange);
-  }, []);
-
-  const activeMetrics = metrics || KostStorage.getOwnerMetrics();
-
-  // Aggregate real transactions from Finance Tracker by month (PRIMARY KEY / SINGLE SOURCE OF TRUTH)
-  const transactionsByMonth: Record<string, { income: number; expense: number; count: number }> = {};
-  cashTransactions.forEach((tx) => {
-    const m = tx.date.slice(0, 7); // e.g. "2026-03"
-    if (!transactionsByMonth[m]) {
-      transactionsByMonth[m] = { income: 0, expense: 0, count: 0 };
-    }
-    transactionsByMonth[m].count += 1;
-    if (tx.type === "income") {
-      transactionsByMonth[m].income += tx.amount;
-    } else {
-      transactionsByMonth[m].expense += tx.amount;
-    }
-  });
-
-  // Current active month dynamic figures (March 2026)
-  const currentMonthKey = "2026-03";
-  const currentMonthData = transactionsByMonth[currentMonthKey] || {
-    income: 0,
-    expense: 0,
-    count: 0,
-  };
-
-  // 1. Data Cashflow: Pemasukan vs Pengeluaran (Line/Area Chart)
-  // Dynamic 6-Month Dataset directly from Cash Transactions Primary Keys
-  const monthlyCashflowData = [
-    {
-      period: "Okt 2025",
-      Pemasukan: transactionsByMonth["2025-10"]?.income || 0,
-      Pengeluaran: transactionsByMonth["2025-10"]?.expense || 0,
-      LabaBersih:
-        (transactionsByMonth["2025-10"]?.income || 0) -
-        (transactionsByMonth["2025-10"]?.expense || 0),
-      okupansi: 78,
-    },
-    {
-      period: "Nov 2025",
-      Pemasukan: transactionsByMonth["2025-11"]?.income || 0,
-      Pengeluaran: transactionsByMonth["2025-11"]?.expense || 0,
-      LabaBersih:
-        (transactionsByMonth["2025-11"]?.income || 0) -
-        (transactionsByMonth["2025-11"]?.expense || 0),
-      okupansi: 83,
-    },
-    {
-      period: "Des 2025",
-      Pemasukan: transactionsByMonth["2025-12"]?.income || 0,
-      Pengeluaran: transactionsByMonth["2025-12"]?.expense || 0,
-      LabaBersih:
-        (transactionsByMonth["2025-12"]?.income || 0) -
-        (transactionsByMonth["2025-12"]?.expense || 0),
-      okupansi: 88,
-    },
-    {
-      period: "Jan 2026",
-      Pemasukan: transactionsByMonth["2026-01"]?.income || 0,
-      Pengeluaran: transactionsByMonth["2026-01"]?.expense || 0,
-      LabaBersih:
-        (transactionsByMonth["2026-01"]?.income || 0) -
-        (transactionsByMonth["2026-01"]?.expense || 0),
-      okupansi: 85,
-    },
-    {
-      period: "Feb 2026",
-      Pemasukan: transactionsByMonth["2026-02"]?.income || 0,
-      Pengeluaran: transactionsByMonth["2026-02"]?.expense || 0,
-      LabaBersih:
-        (transactionsByMonth["2026-02"]?.income || 0) -
-        (transactionsByMonth["2026-02"]?.expense || 0),
-      okupansi: 88,
-    },
-    {
-      period: "Mar 2026 (Kini)",
-      Pemasukan: currentMonthData.income,
-      Pengeluaran: currentMonthData.expense,
-      LabaBersih: currentMonthData.income - currentMonthData.expense,
-      okupansi: metrics.occupancyRate || 92,
-    },
-  ];
-
-  // Filtered Cashflow Data for 30d, 6m, 1y
-  let displayedCashflowData = monthlyCashflowData;
-  if (cashflowTimeframe === "30d") {
-    displayedCashflowData = [
-      {
-        period: "Feb 2026",
-        Pemasukan: transactionsByMonth["2026-02"]?.income || 0,
-        Pengeluaran: transactionsByMonth["2026-02"]?.expense || 0,
-        LabaBersih:
-          (transactionsByMonth["2026-02"]?.income || 0) -
-          (transactionsByMonth["2026-02"]?.expense || 0),
-        okupansi: 88,
-      },
-      {
-        period: "Mar 2026 (Kini)",
-        Pemasukan: currentMonthData.income,
-        Pengeluaran: currentMonthData.expense,
-        LabaBersih: currentMonthData.income - currentMonthData.expense,
-        okupansi: metrics.occupancyRate || 92,
-      },
-    ];
-  } else if (cashflowTimeframe === "1y") {
-    const q1Income =
-      (transactionsByMonth["2026-01"]?.income || 0) +
-      (transactionsByMonth["2026-02"]?.income || 0) +
-      currentMonthData.income;
-    const q1Expense =
-      (transactionsByMonth["2026-01"]?.expense || 0) +
-      (transactionsByMonth["2026-02"]?.expense || 0) +
-      currentMonthData.expense;
-
-    const q4Income = transactionsByMonth["2025-12"]?.income || 0;
-    const q4Expense = transactionsByMonth["2025-12"]?.expense || 0;
-
-    const q3Income = (transactionsByMonth["2025-10"]?.income || 0) + (transactionsByMonth["2025-11"]?.income || 0);
-    const q3Expense = (transactionsByMonth["2025-10"]?.expense || 0) + (transactionsByMonth["2025-11"]?.expense || 0);
-
-    displayedCashflowData = [
-      { period: "Q3 2025", Pemasukan: q3Income, Pengeluaran: q3Expense, LabaBersih: q3Income - q3Expense, okupansi: 82 },
-      { period: "Q4 2025", Pemasukan: q4Income, Pengeluaran: q4Expense, LabaBersih: q4Income - q4Expense, okupansi: 88 },
-      { period: "Q1 2026", Pemasukan: q1Income, Pengeluaran: q1Expense, LabaBersih: q1Income - q1Expense, okupansi: 92 },
-    ];
-  }
-
-  // Current Active Period Summary Figures
-  const totalPeriodIncome =
-    cashflowTimeframe === "30d"
-      ? currentMonthData.income
-      : displayedCashflowData.reduce((s, d) => s + d.Pemasukan, 0);
-
-  const totalPeriodExpense =
-    cashflowTimeframe === "30d"
-      ? currentMonthData.expense
-      : displayedCashflowData.reduce((s, d) => s + d.Pengeluaran, 0);
-
+  const monthlyCashflowData = ownerCashflow(data, "6m");
+  const displayedCashflowData = ownerCashflow(data, cashflowTimeframe);
+  const totalPeriodIncome = displayedCashflowData.reduce((s, d) => s + d.Pemasukan, 0);
+  const totalPeriodExpense = displayedCashflowData.reduce((s, d) => s + d.Pengeluaran, 0);
   const totalPeriodNet = totalPeriodIncome - totalPeriodExpense;
-
-  const netMarginPercent =
-    totalPeriodIncome > 0
-      ? Math.round(((totalPeriodIncome - totalPeriodExpense) / totalPeriodIncome) * 1000) / 10
-      : totalPeriodExpense > 0
-      ? -100
-      : 0;
-
+  const netMarginPercent = totalPeriodIncome > 0 ? Math.round(totalPeriodNet / totalPeriodIncome * 1000) / 10 : null;
   // 2. Data Okupansi & Penghuni (Donut & Room Types Distribution)
   const occupancyChartData = [
     { name: "Terisi (Aktif)", value: metrics.occupiedRooms, color: "#0A0A0A" },
@@ -324,6 +131,8 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
 
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ Periode: currentMonthKey, "Uang Masuk (Kas)": currentKpis.revenue, "Uang Keluar (Kas)": currentKpis.costs, "Laba Bersih (Basis Kas)": currentKpis.profit, "Saldo Kas": currentKpis.cash }]), "Ringkasan Keuangan");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(entries.map(e => ({ Tanggal: e.date, Keterangan: e.title, Jenis: e.type === "income" ? "Uang Masuk" : "Uang Keluar", Kategori: e.category, Nominal: e.amount, Rekening: data.wallets.find(w => w.id === e.wallet_id)?.name || e.payment_method || "Belum dialokasikan" }))), "Transaksi Keuangan");
 
     // Sheet 1: Invoices
     const invoiceRows = invoices.map((i) => ({
@@ -377,18 +186,20 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
       {/* Top Header & Export Controls */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-2xl font-black tracking-tight text-neutral-900 dark:text-white">
               Executive Dashboard & Financial Analytics
             </h2>
             <Badge variant="lime">Live Tracking</Badge>
           </div>
           <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mt-0.5">
-            Pelacakan diagram arus kas (pemasukan & pengeluaran), metrik revenue, dan analitik okupansi penghuni.
+            Pantau uang masuk, uang keluar, tagihan, dan okupansi penghuni dari satu dashboard.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <FinancePropertyPicker className="w-full sm:w-auto" />
+          {financeTab && <Button onClick={() => onNavigateTab?.(financeTab)} variant="lime" className="gap-2 text-xs font-bold"><Wallet className="h-4 w-4" />Buka Keuangan</Button>}
           <Button
             onClick={handleExportExcel}
             variant="outline"
@@ -408,55 +219,74 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
         </div>
       </div>
 
-      {/* Flagship Hero Showcase Bento Card */}
-      <div className="relative overflow-hidden rounded-3xl p-7 sm:p-9 bento-hero shadow-spatial border border-white/60 dark:border-white/10 flex flex-col justify-between min-h-[340px]">
+      {error && <div role="alert" className="rounded-xl border border-orange-400/20 bg-orange-400/10 p-4 text-xs text-orange-600 dark:text-orange-200">Sinkronisasi finance gagal. Angka dari cache ditampilkan. {error} <button onClick={() => refresh()} className="ml-2 font-semibold underline">Coba lagi</button></div>}
+      <p className="text-xs text-neutral-500 dark:text-neutral-400">{loading ? "Memuat keuangan..." : local ? "Mode lokal · tersimpan di browser" : "Terhubung ke Supabase"} · Basis kas: uang masuk dihitung saat diterima, uang keluar saat dibayar. Angka memakai pencatatan yang sama dengan menu Keuangan.</p>
+
+      {/* Flagship Hero Showcase Bento Card (Cosmic Obsidian & Star Ambience) */}
+      <div className="relative overflow-hidden rounded-[28px] p-5 sm:p-9 bg-[#0B0C0E] border border-white/10 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7)] text-white flex flex-col justify-between min-h-[350px]">
+        {/* Breathing Radial Aura Behind Hero */}
+        <div
+          className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-radial from-[#D9FF43]/15 via-transparent to-transparent blur-3xl pointer-events-none"
+          style={{ animation: "auraPulse 6s ease-in-out infinite" }}
+        />
+
+        {/* Cosmic Star Ambience */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <span className="star-particle" style={{ top: "18%", left: "12%", ["--star-size" as any]: "3px", ["--star-delay" as any]: "0s", ["--star-duration" as any]: "4.5s" }} />
+          <span className="star-particle" style={{ top: "32%", right: "24%", ["--star-size" as any]: "4.5px", ["--star-delay" as any]: "1.2s", ["--star-duration" as any]: "5.2s" }} />
+          <span className="star-particle" style={{ top: "74%", left: "30%", ["--star-size" as any]: "3.5px", ["--star-delay" as any]: "2.1s", ["--star-duration" as any]: "4s" }} />
+          <span className="star-particle" style={{ top: "82%", right: "14%", ["--star-size" as any]: "4px", ["--star-delay" as any]: "0.8s", ["--star-duration" as any]: "6s" }} />
+          <span className="star-particle" style={{ top: "22%", right: "48%", ["--star-size" as any]: "3px", ["--star-delay" as any]: "2.8s", ["--star-duration" as any]: "5s" }} />
+          <span className="star-particle" style={{ top: "62%", left: "78%", ["--star-size" as any]: "4.5px", ["--star-delay" as any]: "1.6s", ["--star-duration" as any]: "4.8s" }} />
+        </div>
+
         {/* Top Badges */}
-        <div className="flex items-center gap-2">
-          <span className="glass-pill px-3.5 py-1 text-xs font-bold text-neutral-900 dark:text-white rounded-full">
-            Bulan Berjalan · Q1 2026
+        <div className="relative z-10 flex flex-wrap items-center gap-2">
+          <span className="px-3.5 py-1 text-xs font-bold text-neutral-200 rounded-full border border-white/10 bg-[#171821] backdrop-blur-md shadow-xs">
+            Bulan Berjalan · {monthLabel(currentMonthKey)}
           </span>
-          <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400">
+          <span className="text-xs font-semibold text-neutral-400">
             Kost ERP Pro Analytics
           </span>
         </div>
 
         {/* Large Title & Subtitle */}
-        <div className="my-5">
-          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-neutral-900 dark:text-white">
+        <div className="relative z-10 my-5">
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white">
             {propertyInfo.name}
           </h1>
-          <p className="text-sm font-medium text-neutral-600 dark:text-neutral-400 mt-1 max-w-xl">
+          <p className="text-sm font-medium text-neutral-400 mt-1 max-w-xl">
             Operasional Properti{propertyInfo.city ? ` · ${propertyInfo.city}` : propertyInfo.address ? ` · ${propertyInfo.address.split(",")[0]}` : ""} · {metrics.totalRooms} Unit Kamar Total · Smart WA Webhook
           </p>
         </div>
 
-        {/* Overlapping Translucent Frosted Glass Metric Badges */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-3">
+        {/* High-Contrast Obsidian Metric Badges */}
+        <div className="relative z-10 grid grid-cols-1 sm:grid-cols-3 gap-3.5 my-3">
           {/* Metric 1: Okupansi */}
-          <div className="glass-pill rounded-2xl p-3.5 flex items-center gap-3 transition-transform hover:scale-[1.02]">
+          <div className="rounded-2xl p-4 flex items-center gap-3.5 transition-all duration-300 hover:scale-[1.02] border border-white/[0.09] hover:border-[#D9FF43]/40 bg-[#14151F] shadow-sm">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#D9FF43] text-[#0A0A0A] shadow-xs">
               <Building2 className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
                 Tingkat Okupansi
               </p>
-              <p className="text-lg font-black text-neutral-900 dark:text-white leading-tight">
-                {metrics.occupancyRate}% ({metrics.occupiedRooms}/{metrics.totalRooms} Unit)
+              <p className="text-xl font-black text-white leading-tight font-mono">
+                {metrics.occupancyRate}% <span className="text-xs font-medium text-neutral-400 font-sans">({metrics.occupiedRooms}/{metrics.totalRooms} Unit)</span>
               </p>
             </div>
           </div>
 
           {/* Metric 2: Revenue */}
-          <div className="glass-pill rounded-2xl p-3.5 flex items-center gap-3 transition-transform hover:scale-[1.02]">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#0A0A0A] text-white shadow-xs dark:bg-white dark:text-[#0A0A0A]">
+          <div className="rounded-2xl p-4 flex items-center gap-3.5 transition-all duration-300 hover:scale-[1.02] border border-white/[0.09] hover:border-[#D9FF43]/40 bg-[#14151F] shadow-sm">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#D9FF43]/15 text-[#D9FF43] border border-[#D9FF43]/30 shadow-xs">
               <DollarSign className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                Penerimaan Sewa Terverifikasi
+              <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+                Uang Masuk (Kas)
               </p>
-              <p className="text-lg font-black text-neutral-900 dark:text-white leading-tight">
+              <p className="text-xl font-black text-white leading-tight font-mono">
                 {formatRupiah(metrics.currentMonthRevenue)}
               </p>
             </div>
@@ -465,16 +295,16 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
           {/* Metric 3: Total Tunggakan */}
           <div
             onClick={() => onNavigateTab && onNavigateTab("billing")}
-            className="glass-pill rounded-2xl p-3.5 flex items-center gap-3 transition-transform hover:scale-[1.02] cursor-pointer"
+            className="rounded-2xl p-4 flex items-center gap-3.5 transition-all duration-300 hover:scale-[1.02] cursor-pointer border border-white/[0.09] hover:border-rose-500/40 bg-[#14151F] shadow-sm"
           >
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-500/20 text-rose-600 dark:text-rose-400 shadow-xs">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-500/20 text-rose-400 shadow-xs border border-rose-500/30">
               <AlertCircle className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
                 Total Tunggakan Sewa
               </p>
-              <p className="text-lg font-black text-rose-600 dark:text-rose-400 leading-tight">
+              <p className="text-xl font-black text-rose-400 leading-tight font-mono">
                 {formatRupiah(metrics.totalUnpaidAmount)}
               </p>
             </div>
@@ -482,28 +312,28 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
         </div>
 
         {/* Bottom Card Footer */}
-        <div className="mt-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-3 border-t border-neutral-300/40 dark:border-white/10">
+        <div className="relative z-10 mt-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-3 border-t border-white/10">
           <div className="flex items-center gap-2">
             <div className="flex items-center -space-x-1.5">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#D9FF43] text-[10px] font-bold text-neutral-900 ring-2 ring-white">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#D9FF43] text-[10px] font-bold text-neutral-900 ring-2 ring-[#0B0C0E]">
                 {metrics.availableRooms}
               </span>
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#0A0A0A] text-[10px] font-bold text-white ring-2 ring-white">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-[10px] font-bold text-black ring-2 ring-[#0B0C0E]">
                 {metrics.occupiedRooms}
               </span>
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white ring-2 ring-white">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-400 text-[10px] font-bold text-black ring-2 ring-[#0B0C0E]">
                 {metrics.maintenanceRooms}
               </span>
             </div>
-            <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+            <span className="text-xs font-semibold text-neutral-300">
               {metrics.availableRooms} Kamar Siap Huni · Status Terhubung
             </span>
           </div>
 
           <Button
-            variant="default"
+            variant="lime"
             onClick={() => onNavigateTab && onNavigateTab("rooms")}
-            className="gap-2 shadow-md hover:scale-105"
+            className="gap-2 shadow-lime-glow font-black text-xs hover:scale-105 transition-transform"
           >
             <span>Inventaris Kamar</span>
             <ArrowUpRight className="h-4 w-4" />
@@ -511,89 +341,97 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
         </div>
       </div>
 
-      {/* 4 Core High-Level KPI Stat Cards */}
+      {/* 4 Core High-Level KPI Stat Cards with Staggered Cascading Entrance */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Okupansi */}
-        <StatCard
-          title="Tingkat Okupansi"
-          value={`${metrics.occupancyRate}%`}
-          subtitle={`${metrics.occupiedRooms} dari ${metrics.totalRooms} Unit Terisi`}
-          icon={Building2}
-          variant="blue"
-          trend={{
-            value: `${metrics.availableRooms} Kamar Siap Huni`,
-            isPositive: true,
-          }}
-        />
+        {/* Saldo kas properti */}
+        <div style={{ animation: "popupSpringIn 0.35s var(--spring-smooth) both", animationDelay: "0ms" }}>
+          <StatCard
+            title="Saldo Kas"
+            value={formatRupiah(currentKpis.cash)}
+            subtitle="Saldo awal + seluruh mutasi hingga hari ini"
+            icon={Wallet}
+            variant="blue"
+            trend={{
+              value: `${data.wallets.filter(w => w.wallet_kind !== "liability").length} Rekening Kas`,
+              isPositive: currentKpis.cash >= 0,
+            }}
+          />
+        </div>
 
         {/* Realisasi Kas Masuk (Revenue) */}
-        <StatCard
-          title="Realisasi Revenue"
-          value={formatRupiah(currentMonthData.income)}
-          subtitle={`Target: ${formatRupiah(metrics.targetMonthlyRevenue)}`}
-          icon={DollarSign}
-          variant="emerald"
-          trend={{
-            value: `${Math.round(
-              (currentMonthData.income / (metrics.targetMonthlyRevenue || 1)) * 100
-            )}% Target Tercapai`,
-            isPositive: currentMonthData.income > 0,
-          }}
-        />
+        <div style={{ animation: "popupSpringIn 0.35s var(--spring-smooth) both", animationDelay: "60ms" }}>
+          <StatCard
+            title="Uang Masuk (Kas)"
+            value={formatRupiah(currentMonthData.income)}
+            subtitle={`Target: ${formatRupiah(metrics.targetMonthlyRevenue)}`}
+            icon={DollarSign}
+            variant="emerald"
+            trend={{
+              value: `${Math.round(
+                (currentMonthData.income / (metrics.targetMonthlyRevenue || 1)) * 100
+              )}% Target Tercapai`,
+              isPositive: currentMonthData.income > 0,
+            }}
+          />
+        </div>
 
-        {/* Laba Bersih Token Listrik */}
-        <StatCard
-          title="Laba Bersih Token PLN"
-          value={`+${formatRupiah(metrics.electricityProfitTotal)}`}
-          subtitle={`${metrics.electricityTransactionsCount} Transaksi Distribusi`}
-          icon={Zap}
-          variant="amber"
-          trend={{
-            value: "100% Margin Bersih",
-            isPositive: true,
-          }}
-        />
+        {/* Biaya yang sudah dibayarkan */}
+        <div style={{ animation: "popupSpringIn 0.35s var(--spring-smooth) both", animationDelay: "120ms" }}>
+          <StatCard
+            title="Uang Keluar (Kas)"
+            value={formatRupiah(currentMonthData.expense)}
+            subtitle={`Biaya dibayarkan · ${monthLabel(currentMonthKey)}`}
+            icon={ArrowDownRight}
+            variant="amber"
+            trend={{
+              value: "Termasuk seluruh pengeluaran lama",
+              isPositive: false,
+            }}
+          />
+        </div>
 
-        {/* Total Tunggakan */}
-        <StatCard
-          title="Unpaid Invoices"
-          value={formatRupiah(metrics.totalUnpaidAmount)}
-          subtitle={`${metrics.unpaidInvoicesCount} Kamar Belum Bayar`}
-          icon={AlertCircle}
-          variant="rose"
-          trend={{
-            value: "Perlu Reminder WA",
-            isPositive: false,
-          }}
-        />
+        {/* Laba bersih bulan berjalan */}
+        <div style={{ animation: "popupSpringIn 0.35s var(--spring-smooth) both", animationDelay: "180ms" }}>
+          <StatCard
+            title="Laba Bersih"
+            value={formatRupiah(currentKpis.profit)}
+            subtitle="Uang masuk dikurangi biaya bulan berjalan"
+            icon={TrendingUp}
+            variant="rose"
+            trend={{
+              value: currentKpis.margin === null ? "Margin belum tersedia" : `Margin ${currentKpis.margin.toFixed(1)}%`,
+              isPositive: currentKpis.profit >= 0,
+            }}
+          />
+        </div>
       </div>
 
       {/* SECTION 1: DIAGRAM GARIS PEMASUKAN DAN PENGELUARAN (CASHFLOW TREND TRACKER) */}
-      <div className="rounded-3xl border border-white/80 bg-white p-6 sm:p-7 shadow-spatial dark:bg-[#18181B] dark:border-white/10">
+      <div className="rounded-3xl border border-white/80 bg-white p-4 sm:p-7 shadow-spatial dark:bg-[#18181B] dark:border-white/10">
         {/* Chart Header & Controls */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-neutral-100 pb-5 dark:border-white/10">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-base font-black tracking-tight text-neutral-900 dark:text-white">
                 Diagram Arus Kas: Pemasukan vs Pengeluaran
               </h3>
               <span
                 className={`rounded-full px-2.5 py-0.5 text-[10px] font-black ${
-                  netMarginPercent >= 0
+                  netMarginPercent !== null && netMarginPercent >= 0
                     ? "bg-[#D9FF43] text-[#0A0A0A]"
                     : "bg-rose-500 text-white"
                 }`}
               >
-                Net Margin {netMarginPercent}%
+                Net Margin {netMarginPercent === null ? "—" : `${netMarginPercent}%`}
               </span>
             </div>
             <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mt-0.5">
-              Tren komparasi pemasukan sewa, beban operasional listrik & maintenance, serta laba bersih per periode.
+              Seluruh pendapatan diterima, biaya dibayarkan, dan laba bersih pada periode yang dipilih.
             </p>
           </div>
 
           {/* Timeframe Selector Capsule */}
-          <div className="flex items-center gap-1 rounded-full bg-neutral-100 p-1 dark:bg-neutral-800 shrink-0">
+          <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-neutral-100 p-1 dark:bg-neutral-800 shrink-0">
             <button
               onClick={() => setCashflowTimeframe("6m")}
               className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition-all ${
@@ -664,12 +502,12 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
               <span className="text-xs font-bold text-neutral-400">Laba Bersih Operasional</span>
               <span
                 className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                  netMarginPercent >= 0
+                  netMarginPercent !== null && netMarginPercent >= 0
                     ? "text-[#0A0A0A] bg-[#D9FF43]"
                     : "text-white bg-rose-500"
                 }`}
               >
-                {netMarginPercent}% Margin
+                {netMarginPercent === null ? "Margin —" : `${netMarginPercent}% Margin`}
               </span>
             </div>
             <p
@@ -716,17 +554,46 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
                 }}
               />
               <Tooltip
-                contentStyle={{
-                  backgroundColor: "#0A0A0A",
-                  borderColor: "#27272A",
-                  borderRadius: "1.25rem",
-                  color: "#fff",
-                  fontSize: "12px",
-                  fontWeight: "600",
-                  padding: "12px 16px",
-                  boxShadow: "0 10px 25px -5px rgba(0,0,0,0.3)",
+                cursor={{ stroke: "#D9FF43", strokeWidth: 1.5, strokeDasharray: "4 4" }}
+                content={({ active, payload, label }) => {
+                  if (active && payload && payload.length) {
+                    const inc = (payload.find((p) => p.dataKey === "Pemasukan")?.value as number) || 0;
+                    const exp = (payload.find((p) => p.dataKey === "Pengeluaran")?.value as number) || 0;
+                    const net = (payload.find((p) => p.dataKey === "LabaBersih")?.value as number) ?? (inc - exp);
+                    return (
+                      <div className="rounded-2xl bg-[#0B0C0E]/95 backdrop-blur-xl border border-white/10 p-3.5 shadow-2xl text-white text-xs min-w-[210px]">
+                        <p className="font-black text-neutral-400 text-[11px] mb-2 border-b border-white/10 pb-1.5 flex items-center justify-between">
+                          <span>Periode</span>
+                          <span className="text-white font-bold">{label}</span>
+                        </p>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="flex items-center gap-1.5 text-neutral-300">
+                              <span className="h-2 w-2 rounded-full bg-[#10B981]" />
+                              Pemasukan:
+                            </span>
+                            <span className="font-bold text-emerald-400">{formatRupiah(inc)}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="flex items-center gap-1.5 text-neutral-300">
+                              <span className="h-2 w-2 rounded-full bg-neutral-400" />
+                              Pengeluaran:
+                            </span>
+                            <span className="font-bold text-neutral-300">{formatRupiah(exp)}</span>
+                          </div>
+                          <div className="flex items-center justify-between border-t border-white/10 pt-1.5 mt-1 font-black">
+                            <span className="flex items-center gap-1.5 text-[#D9FF43]">
+                              <span className="h-2 w-2 rounded-full bg-[#D9FF43]" />
+                              Laba Bersih:
+                            </span>
+                            <span className={net >= 0 ? "text-[#D9FF43]" : "text-rose-400"}>{formatRupiah(net)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
                 }}
-                formatter={(val: number, name: string) => [formatRupiah(val), name]}
               />
 
               {/* Area 1: Pemasukan */}
@@ -737,6 +604,7 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
                 strokeWidth={3}
                 fillOpacity={1}
                 fill="url(#incomeGradient)"
+                activeDot={{ r: 6, fill: "#10B981", stroke: "#0B0C0E", strokeWidth: 3 }}
               />
 
               {/* Area 2: Pengeluaran */}
@@ -748,6 +616,7 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
                 strokeDasharray="4 4"
                 fillOpacity={1}
                 fill="url(#expenseGradient)"
+                activeDot={{ r: 5, fill: "#FFFFFF", stroke: "#0B0C0E", strokeWidth: 2.5 }}
               />
 
               {/* Line 3: Laba Bersih */}
@@ -757,6 +626,7 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
                 stroke="#84CC16"
                 strokeWidth={3}
                 dot={{ r: 4, fill: "#D9FF43", strokeWidth: 2, stroke: "#0A0A0A" }}
+                activeDot={{ r: 7, fill: "#D9FF43", stroke: "#0B0C0E", strokeWidth: 3 }}
               />
             </AreaChart>
           </ResponsiveContainer>
@@ -995,10 +865,10 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
           <div className="flex items-center justify-between border-b border-neutral-100 p-5 dark:border-white/10">
             <div>
               <h3 className="text-sm font-black tracking-tight text-neutral-900 dark:text-white">
-                Log Penerimaan Kas Masuk Terverifikasi
+                Pemasukan Terbaru
               </h3>
               <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                Transaksi sewa dan deposit yang telah disetujui mutasinya
+                Pembayaran sewa dan pendapatan manual dari daftar transaksi
               </p>
             </div>
             <Badge variant="lime">Live Audit</Badge>
@@ -1007,7 +877,7 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
           <div className="divide-y divide-neutral-100 dark:divide-white/5">
             {metrics.recentPayments.length === 0 ? (
               <div className="p-8 text-center text-xs text-neutral-500">
-                Belum ada mutasi pembayaran terverifikasi.
+                Belum ada uang masuk yang tercatat.
               </div>
             ) : (
               metrics.recentPayments.slice(0, 5).map((pay) => (
@@ -1056,13 +926,13 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
                 </p>
               </div>
               <span className="rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-bold text-rose-700 dark:bg-rose-950/60 dark:text-rose-300">
-                {invoices.filter((i) => i.status !== "paid").length} Tertunda
+                {metrics.unpaidInvoicesCount} Tertunda
               </span>
             </div>
 
             <div className="mt-3 space-y-2.5">
               {invoices
-                .filter((i) => i.status !== "paid")
+                .filter((i) => receivables([i]).total > 0)
                 .slice(0, 4)
                 .map((inv) => (
                   <div
@@ -1083,7 +953,7 @@ export function OwnerDashboardView({ onNavigateTab }: OwnerDashboardViewProps) {
 
                     <div className="text-right">
                       <p className="font-black text-neutral-900 dark:text-white">
-                        {formatRupiah(inv.total_amount)}
+                        {formatRupiah(receivables([inv]).total)}
                       </p>
                       <button
                         onClick={() => onNavigateTab && onNavigateTab("billing")}

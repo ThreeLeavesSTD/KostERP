@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { ElectricityTransaction } from "@/types";
 import { KostApiClient } from "@/lib/api-client";
+import { KostStorage } from "@/lib/storage";
 import {
   formatRupiah,
   formatDateIndo,
@@ -26,17 +27,18 @@ import { TokenPurchaseModal } from "./token-purchase-modal";
 import { TokenDispatchDialog } from "./token-dispatch-dialog";
 
 export function ElectricityView() {
-  const [transactions, setTransactions] = useState<ElectricityTransaction[]>([]);
+  const [transactions, setTransactions] = useState<ElectricityTransaction[]>(() => {
+    return typeof window !== "undefined" ? KostStorage.getElectricityTransactions() : [];
+  });
   const [searchQuery, setSearchQuery] = useState("");
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   const [selectedTxForDispatch, setSelectedTxForDispatch] =
     useState<ElectricityTransaction | null>(null);
   const [copiedTokenId, setCopiedTokenId] = useState<string | null>(null);
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
   const loadData = async () => {
-    setIsLoading(true);
     try {
       const data = await KostApiClient.getElectricityTransactions();
       setTransactions(data);
@@ -49,6 +51,12 @@ export function ElectricityView() {
 
   useEffect(() => {
     loadData();
+
+    const handleStorageChange = () => {
+      setTransactions(KostStorage.getElectricityTransactions());
+    };
+    window.addEventListener("kost_storage_change", handleStorageChange);
+    return () => window.removeEventListener("kost_storage_change", handleStorageChange);
   }, []);
 
   const filtered = transactions.filter((t) => {
@@ -100,7 +108,10 @@ export function ElectricityView() {
 
       {/* Bento Metric Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-3xl border border-white/80 bg-white p-5 shadow-spatial dark:bg-[#18181B] dark:border-white/10">
+        <div 
+          className="rounded-[22px] border border-neutral-200/80 bg-white p-5 shadow-spatial transition-all duration-300 hover:shadow-spatial-hover dark:bg-[#18181B] dark:border-white/10"
+          style={{ animation: "staggerIn 0.4s var(--spring-smooth) both", animationDelay: "0ms" }}
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">Total Transaksi</span>
             <div className="rounded-2xl bg-neutral-100 p-2.5 text-neutral-900 dark:bg-neutral-800 dark:text-white">
@@ -113,7 +124,10 @@ export function ElectricityView() {
           <p className="mt-1 text-[11px] font-medium text-neutral-500">Distribusi token ke penghuni</p>
         </div>
 
-        <div className="rounded-3xl border border-white/80 bg-white p-5 shadow-spatial dark:bg-[#18181B] dark:border-white/10">
+        <div 
+          className="rounded-[22px] border border-neutral-200/80 bg-white p-5 shadow-spatial transition-all duration-300 hover:shadow-spatial-hover dark:bg-[#18181B] dark:border-white/10"
+          style={{ animation: "staggerIn 0.4s var(--spring-smooth) both", animationDelay: "55ms" }}
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">Omzet Penjualan</span>
             <div className="rounded-2xl bg-neutral-100 p-2.5 text-neutral-900 dark:bg-neutral-800 dark:text-white">
@@ -126,19 +140,31 @@ export function ElectricityView() {
           <p className="mt-1 text-[11px] font-medium text-neutral-500">Total akumulasi harga jual</p>
         </div>
 
-        <div className="rounded-3xl border border-neutral-800 bg-[#0A0A0A] p-5 shadow-spatial text-white">
-          <div className="flex items-center justify-between">
+        <div 
+          className="relative overflow-hidden rounded-[22px] border border-white/[0.09] bg-[#0B0C0E] p-5 shadow-spatial text-white transition-all duration-300 hover:border-[#D9FF43]/40"
+          style={{ animation: "staggerIn 0.4s var(--spring-smooth) both", animationDelay: "110ms" }}
+        >
+          {/* Subtle cosmic glow */}
+          <div 
+            className="absolute -right-10 -top-10 h-32 w-32 rounded-full pointer-events-none blur-2xl"
+            style={{
+              background: "radial-gradient(circle, rgba(217, 255, 67, 0.15) 0%, transparent 70%)",
+            }}
+          />
+          <span className="star-particle" style={{ top: "20%", right: "25%", "--star-size": "3px", "--star-delay": "0.5s", "--star-duration": "4s" } as React.CSSProperties} />
+          
+          <div className="relative z-10 flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">
               Laba Bersih Kost
             </span>
-            <div className="rounded-2xl bg-[#D9FF43] p-2.5 text-[#0A0A0A]">
+            <div className="rounded-2xl bg-[#D9FF43] p-2.5 text-[#0A0A0A] shadow-xs">
               <TrendingUp className="h-4 w-4" />
             </div>
           </div>
-          <p className="mt-3 text-2xl font-black tracking-tight text-[#D9FF43]">
+          <p className="relative z-10 mt-3 text-2xl font-black tracking-tight text-[#D9FF43] font-mono">
             +{formatRupiah(totalProfit)}
           </p>
-          <p className="mt-1 text-[11px] font-medium text-neutral-400">
+          <p className="relative z-10 mt-1 text-[11px] font-medium text-neutral-400">
             Margin keuntungan bersih token
           </p>
         </div>

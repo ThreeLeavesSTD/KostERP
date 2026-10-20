@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { Room, RoomStatus, RoomComplaint, RoomType } from "@/types";
 import { KostApiClient } from "@/lib/api-client";
+import { KostStorage } from "@/lib/storage";
 import { formatRupiah, getRoomStatusInfo } from "@/lib/utils";
 import { notify } from "@/lib/notify";
 import { RoomModal } from "./room-modal";
@@ -37,9 +38,9 @@ export function RoomsView({
   onOpenElectricityForRoom,
   onNavigateTab,
 }: RoomsViewProps) {
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [roomTypes, setRoomTypes] = useState<RoomType[]>([]);
-  const [complaints, setComplaints] = useState<RoomComplaint[]>([]);
+  const [rooms, setRooms] = useState<Room[]>(() => KostStorage.getRooms());
+  const [roomTypes, setRoomTypes] = useState<RoomType[]>(() => KostStorage.getRoomTypes());
+  const [complaints, setComplaints] = useState<RoomComplaint[]>(() => KostStorage.getComplaints());
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFloor, setSelectedFloor] = useState<number | "all">("all");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
@@ -51,10 +52,9 @@ export function RoomsView({
   const [isComplaintsModalOpen, setIsComplaintsModalOpen] = useState(false);
   const [selectedRoomForComplaints, setSelectedRoomForComplaints] = useState<string | undefined>(undefined);
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(() => KostStorage.getRooms().length === 0);
 
   const loadData = async () => {
-    setIsLoading(true);
     try {
       const [r, c, rt] = await Promise.all([
         KostApiClient.getRooms(),
@@ -73,6 +73,14 @@ export function RoomsView({
 
   useEffect(() => {
     loadData();
+
+    const handleStorageChange = () => {
+      setRooms(KostStorage.getRooms());
+      setComplaints(KostStorage.getComplaints());
+      setRoomTypes(KostStorage.getRoomTypes());
+    };
+    window.addEventListener("kost_storage_change", handleStorageChange);
+    return () => window.removeEventListener("kost_storage_change", handleStorageChange);
   }, []);
 
   const floors = Array.from(new Set(rooms.map((r) => r.floor))).sort((a, b) => a - b);
@@ -348,7 +356,7 @@ export function RoomsView({
           </div>
 
           {/* Floor Filter Capsule */}
-          <div className="flex items-center gap-1.5 rounded-full bg-neutral-100 p-1 dark:bg-neutral-800 shrink-0">
+          <div className="flex w-full max-w-full items-center gap-1.5 overflow-x-auto rounded-full bg-neutral-100 p-1 dark:bg-neutral-800 sm:w-auto">
             <button
               onClick={() => setSelectedFloor("all")}
               className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition-all ${

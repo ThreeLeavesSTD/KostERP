@@ -17,9 +17,11 @@ import { AIAssistantView } from "@/components/assistant/ai-assistant-view";
 import { FloatingAIChatbot } from "@/components/assistant/floating-ai-chatbot";
 import { ProfileView } from "@/components/profile/profile-view";
 import { StaffManagementView } from "@/components/staff/staff-management-view";
-import { CashFlowView } from "@/components/finance/cashflow-view";
+import { FinanceWorkspace } from "@/components/finance/finance-workspace";
+import { FINANCE_PAGES, type FinanceWorkspacePage } from "@/types/finance";
 import { LeadsView } from "@/components/leads/leads-view";
 import { PropertySettingsView } from "@/components/property/property-settings-view";
+import { FinanceWorkspaceProvider } from "@/lib/finance-workspace-context";
 
 import { useAuth } from "@/lib/auth-context";
 import { hasPermission, getPermissionsForRole, ALL_PERMISSIONS } from "@/lib/permissions";
@@ -34,6 +36,25 @@ export default function HomePage() {
   const [isAiChatOpen, setIsAiChatOpen] = useState<boolean>(false);
   const [assistantInitialPrompt, setAssistantInitialPrompt] = useState<string>("");
   const [isTabInitialized, setIsTabInitialized] = useState<boolean>(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const isFinancePage = FINANCE_PAGES.some(page => page.id === activeTab) || activeTab === "expenses";
+
+  useEffect(() => {
+    let savedTheme: string | null = null;
+    try { savedTheme = localStorage.getItem("kost_theme") || localStorage.getItem("kost_finance_theme"); } catch { /* Keep the default theme if storage is unavailable. */ }
+    const initialTheme = savedTheme === "light" ? "light" : "dark";
+    setTheme(initialTheme);
+    document.documentElement.classList.toggle("dark", initialTheme === "dark");
+    document.documentElement.style.colorScheme = initialTheme;
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    setTheme(nextTheme);
+    document.documentElement.classList.toggle("dark", nextTheme === "dark");
+    document.documentElement.style.colorScheme = nextTheme;
+    try { localStorage.setItem("kost_theme", nextTheme); } catch { /* Apply the selected theme for this session if storage is unavailable. */ }
+  }, [theme]);
 
   useEffect(() => {
     // Prevent non-Error Event objects from bubbling to Next.js dev overlay
@@ -181,17 +202,20 @@ export default function HomePage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#EDEDED] dark:bg-[#0A0A0A] text-neutral-900 dark:text-white transition-colors">
+    <FinanceWorkspaceProvider>
+    <div data-finance-theme={theme} className={`app-shell flex min-h-screen min-w-0 flex-col bg-[#EDEDED] dark:bg-[#0A0A0A] text-neutral-900 dark:text-white transition-colors ${theme === "dark" ? "dark" : ""} ${isFinancePage ? "finance-shell" : ""}`}>
       {/* Top Floating App Header */}
       <Header
         currentRole={currentRole}
         activeTab={activeTab}
         onTabChange={handleNavigateTab}
         onLogout={handleLogout}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
 
       {/* Main Container */}
-      <div className="flex-1 px-2 sm:px-6 pb-6">
+      <div className="min-w-0 flex-1 px-1 pb-6 sm:px-6">
         {/* Desktop Floating Slim Dock (Fixed in view) */}
         <Sidebar
           currentRole={currentRole}
@@ -200,8 +224,9 @@ export default function HomePage() {
         />
 
         {/* Content Area with left offset for fixed dock */}
-        <main className="md:pl-24 rounded-3xl p-3 sm:p-5 lg:p-6 pb-28 md:pb-6">
-          <div className="mx-auto max-w-7xl">
+        <main className="app-main min-w-0 rounded-3xl p-3 pb-28 sm:p-5 sm:pb-28 md:pb-6 md:pl-24 lg:p-6 lg:pl-24">
+          <div className="mx-auto min-w-0 max-w-7xl">
+            {isFinancePage && <FinanceWorkspace page={activeTab as FinanceWorkspacePage} onNavigate={handleNavigateTab} />}
             {activeTab === "owner-dashboard" && (
               <OwnerDashboardView onNavigateTab={handleNavigateTab} />
             )}
@@ -211,9 +236,6 @@ export default function HomePage() {
                 onNavigateTab={handleNavigateTab}
                 onClearInitialPrompt={() => setAssistantInitialPrompt("")}
               />
-            )}
-            {activeTab === "cashflow" && (
-              <CashFlowView currentRole={currentRole} />
             )}
             {activeTab === "staff-management" && (
               <StaffManagementView
@@ -270,5 +292,6 @@ export default function HomePage() {
         onNavigateTab={handleNavigateTab}
       />
     </div>
+    </FinanceWorkspaceProvider>
   );
 }

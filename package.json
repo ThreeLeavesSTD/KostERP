@@ -9,12 +9,14 @@
     "dev:all": "concurrently --kill-others \"npm run dev:backend\" \"npm run dev:frontend\"",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:finance": "node --test scripts/test-finance.cjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.49.1",
     "clsx": "^2.1.1",
+    "jspdf": "^4.2.1",
     "lucide-react": "^1.16.0",
     "next": "^15.2.0",
     "react": "^19.0.0",

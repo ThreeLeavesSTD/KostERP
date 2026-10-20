@@ -8,16 +8,15 @@ import {
   Zap,
   Receipt,
   Building2,
-  FileSpreadsheet,
-  Settings,
   UserPlus,
   User,
-  Wallet,
   Target,
   Layers,
+  CircleDollarSign,
 } from "lucide-react";
 import { UserRole } from "@/types";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission, financeLanding } from "@/lib/permissions";
+import { FINANCE_ROUTES } from "@/types/finance";
 import { useAuth } from "@/lib/auth-context";
 
 interface SidebarProps {
@@ -49,11 +48,7 @@ export function Sidebar({ currentRole, activeTab, onTabChange }: SidebarProps) {
       label: "Dashboard Owner",
       icon: LayoutDashboard,
     },
-    {
-      id: "cashflow",
-      label: "Kas Operasional",
-      icon: Wallet,
-    },
+    { id: financeLanding(currentRole, profile?.permissions) || "finance", label: "Keuangan", icon: CircleDollarSign },
     {
       id: "staff-management",
       label: "Karyawan & Custom Role",
@@ -91,11 +86,6 @@ export function Sidebar({ currentRole, activeTab, onTabChange }: SidebarProps) {
       icon: Receipt,
     },
     {
-      id: "owner-audit",
-      label: "Laporan & Arus Kas",
-      icon: FileSpreadsheet,
-    },
-    {
       id: "property-settings",
       label: "Pengaturan Properti",
       icon: Building2,
@@ -122,7 +112,7 @@ export function Sidebar({ currentRole, activeTab, onTabChange }: SidebarProps) {
         >
           {visibleItems.map((item) => {
             const Icon = item.icon;
-            const isActive = activeTab === item.id;
+            const isActive = activeTab === item.id || (item.label === "Keuangan" && FINANCE_ROUTES.includes(activeTab));
             return (
               <button
                 key={item.id}
@@ -141,7 +131,7 @@ export function Sidebar({ currentRole, activeTab, onTabChange }: SidebarProps) {
                 title={item.label}
                 className={`relative flex h-[38px] w-[38px] sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-2xl transition-all duration-200 ${
                   isActive
-                    ? "bg-[#0A0A0A] text-white shadow-spatial scale-105 dark:bg-white dark:text-[#0A0A0A]"
+                    ? "bg-[#0A0A0A] text-white shadow-spatial scale-105 dark:bg-[#D9FF43] dark:text-[#0A0A0A]"
                     : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:text-white dark:hover:bg-neutral-800"
                 }`}
               >

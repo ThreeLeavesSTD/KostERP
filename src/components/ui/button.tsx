@@ -25,10 +25,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     };
 
     const sizeClasses = {
-      default: "h-10 px-5 py-2",
-      sm: "h-8 px-3.5 text-xs",
+      default: "h-11 px-5 py-2 sm:h-10",
+      sm: "h-11 px-3.5 text-xs sm:h-8",
       lg: "h-12 px-7 text-base font-bold",
-      icon: "h-9 w-9 p-0 rounded-full",
+      icon: "h-11 w-11 p-0 rounded-full sm:h-9 sm:w-9",
     };
 
     return (

@@ -2,6 +2,40 @@
 @tailwind components;
 @tailwind utilities;
 
+.finance-shell { --finance-bg: #0e1012; --finance-fg: #fff; --finance-muted: #a2a7ad; --finance-border: rgba(255,255,255,.08); --finance-grid: #ffffff0c; --finance-chart-muted: #888e94; --finance-chart-surface: #202224; --finance-accent-chart: #D9FF43; background: var(--finance-bg) !important; color: var(--finance-fg); color-scheme: dark; }
+.finance-shell > header { background: rgba(14, 16, 18, .92); }
+.finance-shell[data-finance-theme="light"] { --finance-bg: #f3f4f1; --finance-fg: #181a1c; --finance-muted: #636b70; --finance-border: #e1e5de; --finance-grid: #dfe3dc; --finance-chart-muted: #6f777c; --finance-chart-surface: #fff; --finance-accent-chart: #617800; background: var(--finance-bg) !important; color: var(--finance-fg); color-scheme: light; }
+.finance-shell[data-finance-theme="light"] > header { background: rgba(248, 249, 246, .94); }
+.finance-workspace .finance-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; color: var(--finance-muted); }
+.finance-workspace .finance-table th { padding: 12px 10px; border-bottom: 1px solid var(--finance-border); color: var(--finance-muted); font-size: 10px; font-weight: 500; white-space: nowrap; }
+.finance-workspace .finance-table td { padding: 14px 10px; border-bottom: 1px solid var(--finance-border); }
+.finance-workspace .finance-table tbody tr:hover { background: color-mix(in srgb, var(--finance-fg) 3%, transparent); }
+.finance-workspace .finance-table tfoot td { border-bottom: 0; padding-top: 18px; }
+.finance-workspace button:focus-visible { outline: 2px solid #D9FF43; outline-offset: 3px; }
+
+.finance-shell[data-finance-theme="light"] [class*="bg-[#17191b]"],
+.finance-shell[data-finance-theme="light"] [class*="bg-[#202224]"],
+.finance-shell[data-finance-theme="light"] [class*="bg-[#13161b]"],
+.finance-shell[data-finance-theme="light"] [class*="bg-[#141416]"],
+.finance-shell[data-finance-theme="light"] [class*="bg-[#18181B]"],
+.finance-shell[data-finance-theme="light"] [class*="bg-[#0A0A0A]"],
+.finance-shell[data-finance-theme="light"] .finance-workspace [class*="bg-white/"] { background-color: #fff !important; }
+.finance-shell[data-finance-theme="light"] [class*="border-white"] { border-color: var(--finance-border) !important; }
+.finance-shell[data-finance-theme="light"] [class*="text-neutral-400"] { color: #667076 !important; }
+.finance-shell[data-finance-theme="light"] [class*="text-neutral-500"] { color: #737b80 !important; }
+.finance-shell[data-finance-theme="light"] [class*="text-neutral-600"] { color: #626b70 !important; }
+.finance-shell[data-finance-theme="light"] [class*="text-neutral-200"] { color: #3e474c !important; }
+.finance-shell[data-finance-theme="light"] [class*="text-neutral-300"] { color: #515a60 !important; }
+.finance-shell[data-finance-theme="light"] [class*="text-[#D9FF43]"] { color: #5a7100 !important; }
+.finance-shell[data-finance-theme="light"] [class*="text-orange-200"] { color: #a84808 !important; }
+.finance-shell[data-finance-theme="light"] [class*="text-orange-300"] { color: #a84808 !important; }
+.finance-shell[data-finance-theme="light"] .text-white { color: #181a1c !important; }
+.finance-shell[data-finance-theme="light"] .text-white[class*="bg-rose-"],
+.finance-shell[data-finance-theme="light"] .text-white[class*="bg-emerald-"] { color: #fff !important; }
+.finance-shell[data-finance-theme="light"] .finance-workspace input,
+.finance-shell[data-finance-theme="light"] .finance-workspace select,
+.finance-shell[data-finance-theme="light"] .finance-workspace textarea { color-scheme: light; }
+
 @layer base {
   :root {
     --background: 220 14% 94%;
@@ -33,6 +67,23 @@
     --ring: 0 0% 4%;
 
     --radius: 1rem;
+
+    /* Rapzeuz Spatial Editorial & Cosmic Obsidian Tokens */
+    --ink: #0A0A0A;
+    --obsidian: #0B0C0E;
+    --obsidian-elevated: #171821;
+    --obsidian-glass: rgba(11, 12, 14, 0.94);
+    --lime: #D9FF43;
+    --lime-mid: #84CC16;
+    --lime-deep: #65A30D;
+    --surface-light: #FFFFFF;
+    --canvas-light: #F6F6F3;
+    --hairline-light: rgba(10, 10, 10, 0.07);
+    --hairline-dark: rgba(255, 255, 255, 0.09);
+
+    /* Signature Spring Curves */
+    --spring-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+    --spring-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   .dark {
@@ -71,9 +122,193 @@
     @apply border-border;
   }
   body {
-    @apply bg-[#EDEDED] text-foreground font-sans antialiased dark:bg-[#0A0A0A];
+    @apply bg-[#F6F6F3] text-foreground font-sans antialiased dark:bg-[#0A0A0A];
     touch-action: manipulation;
   }
+}
+
+/* =========================================================================
+   RAPZEUZ SPATIAL EDITORIAL & COSMIC OBSIDIAN SIGNATURE KEYFRAMES
+   ========================================================================= */
+
+@keyframes fabAuraPulse {
+  0%, 100% {
+    transform: scale(0.92);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.24);
+    opacity: 0.95;
+  }
+}
+
+@keyframes auraPulse {
+  0%, 100% {
+    opacity: 0.45;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes ringSpinCW {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes ringSpinCCW {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes starTwinkleDrift {
+  0%, 100% {
+    opacity: 0.2;
+    transform: translateY(0) scale(0.75);
+  }
+  50% {
+    opacity: 0.95;
+    transform: translateY(-9px) scale(1.3);
+  }
+}
+
+@keyframes stageNodeOrbit {
+  from {
+    transform: rotate(0deg) translateX(10px) rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg) translateX(10px) rotate(-360deg);
+  }
+}
+
+@keyframes popupSpringIn {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes laserSweep {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes crosshairPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(217, 255, 67, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(217, 255, 67, 0);
+  }
+}
+
+/* =========================================================================
+   RAPZEUZ UTILITY CLASSES & COSMIC AMBIENCE
+   ========================================================================= */
+
+.star-particle {
+  position: absolute;
+  width: var(--star-size, 3.5px);
+  height: var(--star-size, 3.5px);
+  border-radius: 50%;
+  background: #D9FF43;
+  box-shadow: 0 0 8px rgba(217, 255, 67, 0.85);
+  animation: starTwinkleDrift var(--star-duration, 4.5s) ease-in-out infinite;
+  animation-delay: var(--star-delay, 0s);
+  pointer-events: none;
+}
+
+.popup-laser-beam {
+  height: 2px;
+  width: 100%;
+  background: linear-gradient(90deg, transparent, #D9FF43, #38BDF8, #A855F7, transparent);
+  background-size: 200% 100%;
+  animation: laserSweep 3.6s linear infinite;
+}
+
+.editorial-card {
+  background: #FFFFFF;
+  border: 1px solid rgba(10, 10, 10, 0.07);
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow: 0 8px 24px rgba(10, 10, 10, 0.03);
+  transition: transform 0.28s var(--spring-smooth), box-shadow 0.28s var(--spring-smooth), border-color 0.2s ease;
+}
+
+.editorial-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(132, 204, 22, 0.45);
+  box-shadow: 0 14px 32px rgba(10, 10, 10, 0.07);
+}
+
+.dark .editorial-card {
+  background: #171821;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.dark .editorial-card:hover {
+  border-color: rgba(217, 255, 67, 0.35);
+}
+
+.obsidian-card {
+  background: #0B0C0E;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 24px;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 20px 48px -12px rgba(0, 0, 0, 0.6);
+  transition: transform 0.28s var(--spring-smooth), border-color 0.2s ease;
+}
+
+.obsidian-card:hover {
+  border-color: rgba(217, 255, 67, 0.35);
+}
+
+.chat-bubble-assistant {
+  background: #171821;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 16px;
+  padding: 12px 15px;
+  color: #F4F4F5;
+  font-size: 13px;
+  line-height: 1.55;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+}
+
+.chat-bubble-user {
+  background: #0A0A0A;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+  padding: 12px 15px;
+  color: #FFFFFF;
+  font-size: 13px;
+  line-height: 1.55;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.dark .chat-bubble-user {
+  background: #FFFFFF;
+  color: #0A0A0A;
+  border: 1px solid rgba(10, 10, 10, 0.1);
 }
 
 /* Glassmorphic & Bento Utilities */
@@ -81,38 +316,50 @@
   background: rgba(255, 255, 255, 0.75);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(10, 10, 10, 0.08);
 }
 
-.dark .glass-panel {
-  background: rgba(18, 18, 20, 0.75);
+.dark .glass-panel,
+[class*="bg-[#0B0C0E]"] .glass-panel,
+[class*="bg-[#0A0A0A]"] .glass-panel,
+.obsidian-card .glass-panel,
+.bento-hero .glass-panel {
+  background: rgba(18, 18, 20, 0.85) !important;
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  color: #FFFFFF !important;
 }
 
 .glass-pill {
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(10, 10, 10, 0.08);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+  color: #0A0A0A;
 }
 
-.dark .glass-pill {
-  background: rgba(26, 26, 30, 0.8);
+.dark .glass-pill,
+[class*="bg-[#0B0C0E]"] .glass-pill,
+[class*="bg-[#0A0A0A]"] .glass-pill,
+.obsidian-card .glass-pill,
+.bento-hero .glass-pill {
+  background: rgba(20, 21, 31, 0.88) !important;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  color: #FFFFFF !important;
 }
 
 .bento-hero {
-  background: linear-gradient(135deg, #E6E8EC 0%, #DCE0E6 100%);
+  background: linear-gradient(135deg, #0B0C0E 0%, #151620 100%);
+  color: #FFFFFF;
 }
 
 .dark .bento-hero {
-  background: linear-gradient(135deg, #18181B 0%, #111113 100%);
+  background: linear-gradient(135deg, #0B0C0E 0%, #12131C 100%);
 }
 
 /* Hide scrollbar utilities */
@@ -158,6 +405,81 @@
 
 .animate-toast-progress {
   animation: toastProgress linear forwards;
+}
+
+/* Keep phone controls clear of the home indicator and the bottom navigation. */
+.mobile-bottom-nav {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  padding-left: max(0.5rem, env(safe-area-inset-left));
+  padding-right: max(0.5rem, env(safe-area-inset-right));
+}
+
+.mobile-chat-trigger {
+  bottom: calc(5.75rem + env(safe-area-inset-bottom));
+  right: max(1rem, env(safe-area-inset-right));
+}
+
+.mobile-modal-overlay {
+  --dialog-inset: 0.75rem;
+  padding-top: max(var(--dialog-inset), env(safe-area-inset-top));
+  padding-right: max(var(--dialog-inset), env(safe-area-inset-right));
+  padding-bottom: max(var(--dialog-inset), env(safe-area-inset-bottom));
+  padding-left: max(var(--dialog-inset), env(safe-area-inset-left));
+}
+
+.mobile-modal-overlay > [role="dialog"] {
+  max-height: calc(100dvh - max(var(--dialog-inset), env(safe-area-inset-top)) - max(var(--dialog-inset), env(safe-area-inset-bottom)));
+}
+
+@media (min-width: 640px) {
+  .mobile-modal-overlay {
+    --dialog-inset: 1.5rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .mobile-chat-trigger {
+    bottom: 1.5rem;
+    right: 1.5rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .app-header {
+    height: calc(4rem + env(safe-area-inset-top));
+    padding-top: calc(0.5rem + env(safe-area-inset-top));
+    padding-left: max(0.75rem, env(safe-area-inset-left));
+    padding-right: max(0.75rem, env(safe-area-inset-right));
+  }
+
+  .app-main {
+    padding-bottom: calc(6.5rem + env(safe-area-inset-bottom));
+  }
+
+  .app-shell button,
+  .app-shell [role="button"],
+  .mobile-modal-overlay button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+    max-width: 100%;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="month"]),
+  select,
+  textarea {
+    min-height: 44px;
+  }
+
+  .app-main .grid > * {
+    min-width: 0;
+  }
+
 }
 
 /* Hide Next.js Development Indicator */

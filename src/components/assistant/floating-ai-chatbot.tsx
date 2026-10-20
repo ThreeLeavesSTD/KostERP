@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { notify } from "@/lib/notify";
 import { sendChatbotMessageToN8n } from "@/lib/n8n/webhook-client";
 import { AdaptiveMessageContent } from "@/components/assistant/adaptive-card";
+import { AiIcon } from "@/components/ui/ai-icon";
 
 interface Message {
   id: string;
@@ -68,7 +69,7 @@ export function FloatingAIChatbot({
   const [isTestingWebhook, setIsTestingWebhook] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<
     "connected" | "standby" | "disconnected" | "checking" | "warning"
-  >("connected");
+  >("standby");
 
   // Load saved session messages from localStorage if available
   const [messages, setMessages] = useState<Message[]>(() => {
@@ -169,14 +170,9 @@ export function FloatingAIChatbot({
     setIsTestingWebhook(true);
     setConnectionStatus("checking");
     try {
-      const res = await fetch("/api/assistant/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: "Ping connection test from Kost Concierge ERP",
-        }),
-      });
-      const data = await res.json();
+      const data = await sendChatbotMessageToN8n(
+        "Ping connection test from Kost Concierge ERP"
+      );
       if (data.success) {
         setConnectionStatus("connected");
         notify.success("n8n AI Terhubung", "Workflow n8n aktif dan merespons dengan sukses.");
@@ -286,38 +282,70 @@ export function FloatingAIChatbot({
 
   return (
     <>
-      {/* 1. FLOATING LAUNCHER BUTTON (When Pop-up is Collapsed/Closed) */}
+      {/* 1. FLOATING LAUNCHER BUTTON (Desktop Orbital FAB - Hidden on mobile) */}
       {!isOpen && (
-        <button
-          onClick={onToggle}
-          title="Buka AI Chatbot Concierge"
-          aria-label="Buka AI Chatbot Concierge"
-          className="fixed bottom-24 right-5 sm:bottom-6 sm:right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#0A0A0A] text-[#D9FF43] shadow-spatial-lg hover:shadow-lime-glow hover:scale-105 active:scale-95 transition-all duration-200 border border-neutral-800 dark:bg-white dark:text-[#0A0A0A] dark:border-neutral-200 cursor-pointer group"
-        >
-          <Sparkles className="h-6 w-6 transition-transform group-hover:rotate-12 duration-200" />
-        </button>
+        <div className="fixed bottom-7 right-7 z-50 hidden md:flex items-center justify-center">
+          {/* Breathing Radial Aura */}
+          <div
+            className="absolute inset-[-14px] rounded-full bg-[#D9FF43]/20 blur-md pointer-events-none"
+            style={{ animation: "fabAuraPulse 3.5s ease-in-out infinite" }}
+          />
+
+          {/* Outer Concentric Orbital Ring (Spins CW with glowing satellite dot) */}
+          <div
+            className="absolute inset-[-10px] rounded-full border border-dashed border-[#D9FF43]/45 pointer-events-none"
+            style={{ animation: "ringSpinCW 18s linear infinite" }}
+          >
+            <span
+              className="absolute -top-[3px] left-1/2 -translate-x-1/2 h-[6px] w-[6px] rounded-full bg-[#D9FF43]"
+              style={{ boxShadow: "0 0 8px #D9FF43" }}
+            />
+          </div>
+
+          {/* Inner Concentric Orbital Ring (Spins CCW) */}
+          <div
+            className="absolute inset-[-4px] rounded-full border border-dashed border-[#D9FF43]/25 pointer-events-none"
+            style={{ animation: "ringSpinCCW 12s linear infinite" }}
+          />
+
+          {/* Canonical Single FAB Button (No text pill alongside) */}
+          <button
+            onClick={onToggle}
+            title="Buka Kost AI Concierge"
+            aria-label="Buka Kost AI Concierge"
+            className="relative flex h-14 w-14 items-center justify-center rounded-full bg-[#0B0C0E] text-[#D9FF43] border border-white/10 shadow-[0_12px_32px_rgba(0,0,0,0.5)] hover:scale-105 active:scale-95 transition-transform duration-200 cursor-pointer group"
+          >
+            <AiIcon size={26} className="transition-transform group-hover:scale-110" />
+          </button>
+        </div>
       )}
 
       {/* 2. FLOATING CHAT POP-UP WINDOW (When Opened) */}
       {isOpen && (
         <div
-          className={`fixed z-50 transition-all duration-300 ease-out flex flex-col rounded-3xl bg-white/95 dark:bg-[#111114]/95 backdrop-blur-2xl border border-neutral-200/90 dark:border-white/10 shadow-spatial-2xl overflow-hidden ${
+          className={`fixed z-50 transition-all duration-300 ease-out flex flex-col bg-[#0B0C0E]/95 backdrop-blur-[24px] border border-white/10 shadow-[0_24px_64px_rgba(0,0,0,0.65)] overflow-hidden ${
             isExpanded
-              ? "bottom-4 right-4 sm:bottom-6 sm:right-6 w-[calc(100vw-32px)] sm:w-[620px] h-[calc(100vh-80px)] max-h-[780px]"
-              : "bottom-4 right-4 sm:bottom-6 sm:right-6 w-[calc(100vw-32px)] sm:w-[420px] h-[580px] max-h-[82vh]"
+              ? "inset-x-2.5 bottom-3 top-auto h-[calc(100dvh-24px)] rounded-[22px] md:inset-auto md:bottom-7 md:right-7 md:w-[680px] md:h-[calc(100dvh-80px)] md:max-h-[780px] md:rounded-[24px]"
+              : "inset-x-2.5 bottom-3 top-auto h-[calc(100dvh-24px)] rounded-[22px] md:inset-auto md:bottom-7 md:right-7 md:w-[420px] md:h-[590px] md:max-h-[82dvh] md:rounded-[24px]"
           }`}
+          style={{ animation: "popupSpringIn 0.35s var(--spring-smooth)" }}
         >
+          {/* Top Laser Sweep Beam */}
+          <div className="popup-laser-beam shrink-0" />
+
           {/* Header Bar */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-100 dark:border-white/10 bg-neutral-50/70 dark:bg-[#18181B]/70 shrink-0">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#12131A]/80 shrink-0">
             <div className="flex items-center gap-2.5">
-              <div className="relative flex h-8 w-8 items-center justify-center rounded-xl bg-[#0A0A0A] text-[#D9FF43] dark:bg-white dark:text-[#0A0A0A]">
-                <Bot className="h-4 w-4" />
+              <div className="relative flex h-8 w-8 items-center justify-center rounded-xl bg-[#171821] text-[#D9FF43] border border-white/10">
+                <AiIcon size={18} />
                 <span
-                  className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-white dark:ring-[#111114] ${
+                  className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-[#0B0C0E] ${
                     connectionStatus === "connected"
-                      ? "bg-emerald-500"
-                      : connectionStatus === "checking"
+                      ? "bg-emerald-400"
+                      : connectionStatus === "checking" || connectionStatus === "warning"
                       ? "bg-amber-400 animate-spin"
+                      : connectionStatus === "standby"
+                      ? "bg-neutral-500"
                       : "bg-rose-500"
                   }`}
                 />
@@ -325,18 +353,22 @@ export function FloatingAIChatbot({
 
               <div>
                 <div className="flex items-center gap-1.5">
-                  <h3 className="text-xs font-black text-neutral-900 dark:text-white leading-none">
+                  <h3 className="text-xs font-black text-white leading-none">
                     Kost AI Concierge
                   </h3>
-                  <span className="rounded-md bg-[#D9FF43] px-1.5 py-0.2 text-[9px] font-black text-[#0A0A0A] leading-tight">
+                  <span className="rounded-md bg-[#D9FF43] px-1.5 py-0.5 text-[9px] font-black text-[#0A0A0A] leading-tight">
                     PRO
                   </span>
                 </div>
                 <p className="text-[10px] font-semibold text-neutral-400 mt-0.5">
                   {connectionStatus === "connected"
-                    ? "Online • n8n Agent"
+                    ? "Online • n8n Spatial Agent"
                     : connectionStatus === "checking"
                     ? "Memeriksa Koneksi..."
+                    : connectionStatus === "standby"
+                    ? "Belum terhubung"
+                    : connectionStatus === "warning"
+                    ? "n8n memberi peringatan"
                     : "Koneksi Terputus"}
                 </p>
               </div>
@@ -348,15 +380,15 @@ export function FloatingAIChatbot({
                 onClick={handleTestWebhook}
                 disabled={isTestingWebhook}
                 title="Ping Test Koneksi Webhook"
-                className="p-1.5 rounded-xl text-neutral-400 hover:text-neutral-900 hover:bg-neutral-200/60 dark:hover:text-white dark:hover:bg-neutral-800 transition-colors"
+                className="p-1.5 rounded-xl text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
               >
-                <RefreshCw className={`h-3.5 w-3.5 ${isTestingWebhook ? "animate-spin text-lime-500" : ""}`} />
+                <RefreshCw className={`h-3.5 w-3.5 ${isTestingWebhook ? "animate-spin text-[#D9FF43]" : ""}`} />
               </button>
 
               <button
                 onClick={handleClearHistory}
                 title="Hapus Riwayat Chat"
-                className="p-1.5 rounded-xl text-neutral-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                className="p-1.5 rounded-xl text-neutral-400 hover:text-rose-400 hover:bg-rose-950/40 transition-colors"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -364,15 +396,16 @@ export function FloatingAIChatbot({
               <button
                 onClick={() => setIsExpanded(!isExpanded)}
                 title={isExpanded ? "Kecilkan Tampilan" : "Perbesar Tampilan"}
-                className="p-1.5 rounded-xl text-neutral-400 hover:text-neutral-900 hover:bg-neutral-200/60 dark:hover:text-white dark:hover:bg-neutral-800 transition-colors hidden sm:inline-flex"
+                className="p-1.5 rounded-xl text-neutral-400 hover:text-white hover:bg-white/10 transition-colors hidden md:inline-flex"
               >
                 {isExpanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
               </button>
 
               <button
                 onClick={onClose}
+                aria-label="Tutup chatbot"
                 title="Tutup / Minimalkan Pop-up"
-                className="p-1.5 rounded-xl text-neutral-400 hover:text-neutral-900 hover:bg-neutral-200/60 dark:hover:text-white dark:hover:bg-neutral-800 transition-colors"
+                className="flex h-8 w-8 items-center justify-center rounded-xl text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -380,7 +413,7 @@ export function FloatingAIChatbot({
           </div>
 
           {/* Messages Scroll Area */}
-          <div className="flex-1 p-3 sm:p-4 overflow-y-auto space-y-3.5 hide-scrollbar">
+          <div className="flex-1 p-3.5 sm:p-4 overflow-y-auto space-y-3.5 hide-scrollbar">
             {messages.map((msg) => {
               const isAssistant = msg.sender === "assistant";
               return (
@@ -389,18 +422,18 @@ export function FloatingAIChatbot({
                   className={`flex gap-2.5 ${isAssistant ? "items-start" : "items-start justify-end"}`}
                 >
                   {isAssistant && (
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-[#0A0A0A] text-[#D9FF43] dark:bg-[#1C1C21] dark:text-[#D9FF43] mt-0.5 text-xs font-bold shadow-xs">
-                      <Bot className="h-3.5 w-3.5" />
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-[#171821] text-[#D9FF43] border border-white/10 mt-0.5 shadow-xs">
+                      <AiIcon size={16} />
                     </div>
                   )}
 
                   <div className={`max-w-[85%] space-y-1.5 ${isAssistant ? "items-start" : "items-end"}`}>
                     <div
-                      className={`p-3 rounded-2xl text-xs leading-relaxed transition-all ${
+                      className={
                         isAssistant
-                          ? "bg-neutral-100 text-neutral-900 dark:bg-[#1A1A1E] dark:text-neutral-100 border border-neutral-200/70 dark:border-neutral-800 shadow-xs"
-                          : "bg-[#0A0A0A] text-white dark:bg-white dark:text-[#0A0A0A] font-medium shadow-spatial"
-                      }`}
+                          ? "chat-bubble-assistant"
+                          : "chat-bubble-user"
+                      }
                     >
                       {isAssistant ? (
                         <AdaptiveMessageContent
@@ -413,17 +446,17 @@ export function FloatingAIChatbot({
 
                       {/* Interactive Action: Unpaid Invoices */}
                       {msg.actionType === "invoices" && msg.actionData && (
-                        <div className="mt-2.5 space-y-1.5 border-t border-neutral-200/70 dark:border-neutral-800 pt-2">
+                        <div className="mt-2.5 space-y-1.5 border-t border-white/10 pt-2">
                           {msg.actionData.slice(0, 2).map((inv: any) => (
                             <div
                               key={inv.id}
-                              className="flex items-center justify-between rounded-xl bg-white dark:bg-[#0E0E10] p-2 border border-neutral-200 dark:border-neutral-800 text-[11px]"
+                              className="flex items-center justify-between rounded-xl bg-[#121318] p-2 border border-white/10 text-[11px]"
                             >
                               <div>
-                                <p className="font-bold text-neutral-900 dark:text-white truncate max-w-[140px]">
+                                <p className="font-bold text-white truncate max-w-[140px]">
                                   Kamar {inv.room_number} · {inv.tenant_name}
                                 </p>
-                                <p className="text-[10px] text-rose-500 font-bold">
+                                <p className="text-[10px] text-rose-400 font-bold">
                                   {formatRupiah(inv.total_amount)}
                                 </p>
                               </div>
@@ -431,7 +464,7 @@ export function FloatingAIChatbot({
                                 size="sm"
                                 variant="default"
                                 onClick={() => onNavigateTab && onNavigateTab("billing")}
-                                className="h-6 px-2 text-[10px] font-bold"
+                                className="h-6 px-2 text-[10px] font-bold bg-white text-black hover:bg-neutral-200"
                               >
                                 Buka
                               </Button>
@@ -442,7 +475,7 @@ export function FloatingAIChatbot({
 
                       {/* Interactive Action: Cashflow */}
                       {msg.actionType === "cashflow" && (
-                        <div className="mt-2 pt-2 border-t border-neutral-200/70 dark:border-neutral-800 flex justify-end">
+                        <div className="mt-2 pt-2 border-t border-white/10 flex justify-end">
                           <Button
                             size="sm"
                             variant="lime"
@@ -461,11 +494,11 @@ export function FloatingAIChatbot({
                         <span>{msg.timestamp}</span>
                         <button
                           onClick={() => handleCopyText(msg.text, msg.id)}
-                          className="hover:text-neutral-700 dark:hover:text-neutral-200 flex items-center gap-0.5 cursor-pointer"
+                          className="hover:text-neutral-200 flex items-center gap-0.5 cursor-pointer"
                           title="Salin balasan"
                         >
                           {copiedId === msg.id ? (
-                            <Check className="h-2.5 w-2.5 text-emerald-500" />
+                            <Check className="h-2.5 w-2.5 text-emerald-400" />
                           ) : (
                             <Copy className="h-2.5 w-2.5" />
                           )}
@@ -473,7 +506,7 @@ export function FloatingAIChatbot({
                         </button>
                         <button
                           onClick={() => handleSpeakText(msg.text, msg.id)}
-                          className="hover:text-neutral-700 dark:hover:text-neutral-200 flex items-center gap-0.5 cursor-pointer"
+                          className="hover:text-neutral-200 flex items-center gap-0.5 cursor-pointer"
                           title="Bacakan teks"
                         >
                           {speakingId === msg.id ? (
@@ -492,29 +525,28 @@ export function FloatingAIChatbot({
 
             {isTyping && (
               <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-[#0A0A0A] text-[#D9FF43] dark:bg-[#1C1C21]">
-                  <Bot className="h-3.5 w-3.5" />
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-[#171821] text-[#D9FF43] border border-white/10">
+                  <AiIcon size={16} />
                 </div>
-                <div className="rounded-2xl bg-neutral-100 dark:bg-[#1A1A1E] p-2.5 text-xs text-neutral-500 flex items-center gap-1.5 border border-neutral-200/60 dark:border-neutral-800">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#0A0A0A] dark:bg-[#D9FF43] animate-bounce" />
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#0A0A0A] dark:bg-[#D9FF43] animate-bounce [animation-delay:0.2s]" />
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#0A0A0A] dark:bg-[#D9FF43] animate-bounce [animation-delay:0.4s]" />
-                  <span className="ml-1 text-[11px] font-semibold">Sedang menganalisis...</span>
+                <div className="rounded-2xl bg-[#171821] p-2.5 text-xs text-neutral-300 flex items-center gap-1.5 border border-white/10">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#D9FF43] animate-bounce" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#D9FF43] animate-bounce [animation-delay:0.2s]" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#D9FF43] animate-bounce [animation-delay:0.4s]" />
+                  <span className="ml-1 text-[11px] font-semibold text-neutral-300">Sedang menganalisis...</span>
                 </div>
               </div>
             )}
             <div ref={messagesEndRef} />
           </div>
 
-
           {/* Input Form */}
-          <div className="p-3 border-t border-neutral-100 dark:border-white/10 bg-neutral-50/50 dark:bg-[#141417]/50 shrink-0">
+          <div className="p-3 border-t border-white/10 bg-[#12131A]/90 shrink-0">
             <form
               onSubmit={(e) => {
                 e.preventDefault();
                 handleUserSubmit(inputPrompt);
               }}
-              className="flex items-center rounded-full border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#18181B] p-1 pl-3.5 focus-within:border-[#D9FF43] focus-within:ring-2 focus-within:ring-[#D9FF43]/20 shadow-spatial transition-all gap-1.5"
+              className="flex items-center rounded-full border border-white/10 bg-[#171821] p-1 pl-3.5 focus-within:border-[#D9FF43] focus-within:ring-2 focus-within:ring-[#D9FF43]/20 shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all gap-1.5"
             >
               <input
                 ref={inputRef}
@@ -522,7 +554,7 @@ export function FloatingAIChatbot({
                 placeholder="Tanyakan kamar, tagihan, token, dll..."
                 value={inputPrompt}
                 onChange={(e) => setInputPrompt(e.target.value)}
-                className="flex-1 bg-transparent text-xs text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 outline-none font-medium"
+                className="flex-1 bg-transparent text-xs text-white placeholder:text-neutral-500 outline-none font-medium"
               />
 
               <Button
@@ -539,3 +571,4 @@ export function FloatingAIChatbot({
     </>
   );
 }
+

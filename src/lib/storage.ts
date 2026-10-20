@@ -45,6 +45,7 @@ import {
 import { FrontendSupabaseService } from "./supabase-service";
 import { KostApiClient } from "./api-client";
 import { getPermissionsForRole, hasPermission as checkStaticPermission } from "./permissions";
+import type { Expense, FinanceBudget, RoomInvestment } from "@/types/finance";
 
 const STORAGE_KEYS = {
   PROPERTIES: "kost_erp_properties",
@@ -65,6 +66,9 @@ const STORAGE_KEYS = {
   FINANCE_CATEGORIES: "kost_erp_finance_categories",
   LEADS: "kost_erp_leads",
   SURVEYS: "kost_erp_surveys",
+  EXPENSES: "kost_erp_expenses",
+  BUDGETS: "kost_erp_finance_budgets",
+  INVESTMENTS: "kost_erp_room_investments",
 };
 
 // Safe JSON parser for localStorage
@@ -91,17 +95,52 @@ export function generateUUID(): string {
   });
 }
 
+let storageChangeTimer: any = null;
+function notifyStorageChange(key?: string) {
+  if (typeof window === "undefined") return;
+  if (storageChangeTimer) clearTimeout(storageChangeTimer);
+  storageChangeTimer = setTimeout(() => {
+    window.dispatchEvent(new CustomEvent("kost_storage_change", { detail: { key } }));
+  }, 40);
+}
+
 function setItem<T>(key: string, value: T): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(key, JSON.stringify(value));
-    window.dispatchEvent(new Event("kost_storage_change"));
+    notifyStorageChange(key);
   } catch (e) {
     console.error(`Error saving ${key} to localStorage:`, e);
   }
 }
 
+function setFinanceItem<T>(key: string, value: T): void {
+  if (typeof window === "undefined") return;
+  // Finance forms must report quota/storage errors instead of claiming a save.
+  localStorage.setItem(key, JSON.stringify(value));
+  notifyStorageChange(key);
+}
+
 export const KostStorage = {
+  saveFinanceSource: (data: { propertyId: string; properties: Property[]; rooms: Room[]; roomTypes: RoomType[]; leases: Lease[]; invoices: Invoice[]; transactions: CashTransaction[]; wallets: FinanceWallet[]; tenants?: Tenant[]; electricity?: ElectricityTransaction[] }) => {
+    const merge = <T extends { property_id: string }>(existing: T[], incoming: T[]) => [...existing.filter(r => r.property_id !== data.propertyId), ...incoming];
+    setItem(STORAGE_KEYS.PROPERTIES, [...KostStorage.getProperties().filter(p => p.id !== data.propertyId), ...data.properties]);
+    setItem(STORAGE_KEYS.ROOMS, merge(KostStorage.getRooms(), data.rooms));
+    setItem(STORAGE_KEYS.ROOM_TYPES, merge(KostStorage.getRoomTypes(), data.roomTypes));
+    setItem(STORAGE_KEYS.LEASES, merge(KostStorage.getLeases(), data.leases));
+    setItem(STORAGE_KEYS.INVOICES, merge(KostStorage.getInvoices(), data.invoices));
+    setItem(STORAGE_KEYS.CASH_TRANSACTIONS, merge(KostStorage.getCashTransactions(), data.transactions));
+    setItem(STORAGE_KEYS.WALLETS, merge(KostStorage.getWallets(), data.wallets));
+    if (data.tenants) setItem(STORAGE_KEYS.TENANTS, merge(KostStorage.getTenants(), data.tenants));
+    if (data.electricity) setItem(STORAGE_KEYS.ELECTRICITY, merge(KostStorage.getElectricityTransactions(), data.electricity));
+  },
+  getExpenses: (): Expense[] => getItem(STORAGE_KEYS.EXPENSES, []),
+  saveExpenses: (rows: Expense[]) => setFinanceItem(STORAGE_KEYS.EXPENSES, rows),
+  saveInvoices: (rows: Invoice[]) => setFinanceItem(STORAGE_KEYS.INVOICES, rows),
+  getFinanceBudgets: (): FinanceBudget[] => getItem(STORAGE_KEYS.BUDGETS, []),
+  saveFinanceBudgets: (rows: FinanceBudget[]) => setFinanceItem(STORAGE_KEYS.BUDGETS, rows),
+  getRoomInvestments: (): RoomInvestment[] => getItem(STORAGE_KEYS.INVESTMENTS, []),
+  saveRoomInvestments: (rows: RoomInvestment[]) => setFinanceItem(STORAGE_KEYS.INVESTMENTS, rows),
   // Initialize storage with defaults if empty
   init: () => {
     if (typeof window === "undefined") return;
@@ -252,17 +291,17 @@ export const KostStorage = {
     return rawRooms.map((room) => {
       // Resolve matched category
       const matchedRt = roomTypes.find(
-        (rt) => rt.id === room.room_type_id || rt.name.toLowerCase() === room.room_type?.toLowerCase()
+        (rt) => rt.property_id === room.property_id && (rt.id === room.room_type_id || rt.name.toLowerCase() === room.room_type?.toLowerCase())
       );
 
       // Find active lease for this room if any
       const activeLease = leases.find(
-        (l) => (l.room_id === room.id || l.room_number === room.room_number) && l.status === "active"
+        (l) => l.property_id === room.property_id && (l.room_id === room.id || l.room_number === room.room_number) && l.status === "active"
       );
 
       // Determine relational tenant ID (from room.tenant_id, activeLease, or current_tenant.id)
       const tenantId = room.tenant_id || activeLease?.tenant_id || room.current_tenant?.id;
-      const matchedTenant = tenantId ? tenants.find((t) => t.id === tenantId) : undefined;
+      const matchedTenant = tenantId ? tenants.find((t) => t.id === tenantId && t.property_id === room.property_id) : undefined;
 
       const baseRoom = {
         ...room,
@@ -765,6 +804,7 @@ export const KostStorage = {
     invoice_id: string;
     amount_paid: number;
     payment_method: string;
+    wallet_id?: string | null;
     proof_url?: string;
     verified_by?: string;
     notes?: string;
@@ -772,12 +812,16 @@ export const KostStorage = {
     const invoices = KostStorage.getInvoices();
     const invoice = invoices.find((i) => i.id === data.invoice_id);
     if (!invoice) throw new Error("Invoice tidak ditemukan");
+    const alreadyPaid = (invoice.payments || []).reduce((total, payment) => total + Number(payment.amount_paid || 0), 0);
+    const remaining = Math.max(0, Number(invoice.total_amount) - alreadyPaid);
+    if (!Number.isFinite(data.amount_paid) || data.amount_paid <= 0 || data.amount_paid > remaining) throw new Error("Nominal pembayaran harus lebih dari nol dan tidak boleh melebihi sisa tagihan.");
 
     const newPayment: Payment = {
       id: generateUUID(),
       invoice_id: data.invoice_id,
       amount_paid: data.amount_paid,
       payment_method: data.payment_method,
+      wallet_id: data.wallet_id || null,
       proof_url: data.proof_url,
       verified_by: data.verified_by || "Admin Kost",
       paid_at: new Date().toISOString(),
@@ -785,29 +829,11 @@ export const KostStorage = {
       created_at: new Date().toISOString(),
     };
 
-    invoice.status = "paid";
+    invoice.status = alreadyPaid + data.amount_paid >= Number(invoice.total_amount)
+      ? "paid"
+      : invoice.due_date < new Date().toISOString().slice(0, 10) ? "overdue" : "unpaid";
     invoice.payments = [...(invoice.payments || []), newPayment];
     setItem(STORAGE_KEYS.INVOICES, [...invoices]);
-    FrontendSupabaseService.createPayment(newPayment).catch((err) => console.warn("Supabase payment sync:", err));
-
-    // Auto create / record Cash Flow income entry in Finance Tracker
-    try {
-      KostStorage.addCashTransaction({
-        property_id: invoice.property_id || "a0000000-0000-0000-0000-000000000001",
-        type: "income",
-        category: "room_rent",
-        category_name: "Sewa Kamar",
-        title: `Pelunasan ${invoice.invoice_number} (Kamar ${invoice.room_number || "-"})`,
-        amount: data.amount_paid,
-        date: new Date().toISOString().slice(0, 10),
-        payment_method: data.payment_method || "BCA Transfer",
-        notes: `Pembayaran sewa terverifikasi via invoice ${invoice.invoice_number} oleh ${data.verified_by || "Admin"}`,
-        recorded_by: data.verified_by || "Admin Kost",
-      });
-    } catch (e) {
-      console.warn("Auto cash transaction note:", e);
-    }
-
     return newPayment;
   },
 
@@ -1188,6 +1214,9 @@ export const KostStorage = {
   // CASH TRANSACTIONS (PENCATATAN KAS OPERASIONAL / FINANCE TRACKER)
   getCashTransactions: (): CashTransaction[] =>
     getItem<CashTransaction[]>(STORAGE_KEYS.CASH_TRANSACTIONS, initialCashTransactions),
+
+  saveCashTransactions: (rows: CashTransaction[]) => setFinanceItem(STORAGE_KEYS.CASH_TRANSACTIONS, rows),
+  saveWallets: (rows: FinanceWallet[]) => setFinanceItem(STORAGE_KEYS.WALLETS, rows),
 
   addCashTransaction: (
     data: Omit<CashTransaction, "id" | "created_at">

@@ -24,6 +24,10 @@ import { KostStorage } from "./storage";
 
 const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000/api";
 
+// Fast Circuit Breaker & In-Flight Request Deduplication for Ultra-Low Latency (0ms)
+let backendOfflineUntil = 0;
+const inFlightGetRequests = new Map<string, Promise<any>>();
+
 async function getAuthHeader(): Promise<Record<string, string>> {
   if (typeof window === "undefined") return {};
   try {
@@ -45,32 +49,73 @@ async function fetchWithFallback<T>(
   fallbackFn: () => T,
   options?: RequestInit
 ): Promise<T> {
-  try {
-    const authHeader = await getAuthHeader();
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000); // 2-second timeout for local backend
+  const method = (options?.method || "GET").toUpperCase();
 
-    const res = await fetch(`${API_BASE}${endpoint}`, {
-      headers: {
-        "Content-Type": "application/json",
-        ...authHeader,
-        ...(options?.headers || {}),
-      },
-      signal: controller.signal,
-      ...options,
-    });
-    clearTimeout(timeoutId);
-
-    if (!res.ok) {
-      return fallbackFn();
-    }
-
-    const result = await res.json();
-    return (result.data ?? result) as T;
-  } catch {
-    // Offline / backend not running / network error -> return local storage data
+  // 1. Circuit Breaker Fast-Fail (0ms fallback if backend recently failed)
+  if (Date.now() < backendOfflineUntil) {
     return fallbackFn();
   }
+
+  // 2. In-Flight Request Deduplication for simultaneous GET calls
+  if (method === "GET") {
+    const inFlight = inFlightGetRequests.get(endpoint);
+    if (inFlight) {
+      return inFlight as Promise<T>;
+    }
+  }
+
+  const execute = async (): Promise<T> => {
+    try {
+      const authHeader = await getAuthHeader();
+
+      // Fast-Path: Protected backend routes require Authorization Bearer token.
+      // If user is logged in locally without Supabase session, avoid wasting HTTP roundtrip that always returns 401.
+      if (!authHeader.Authorization && !endpoint.startsWith("/health") && !endpoint.startsWith("/webhooks")) {
+        return fallbackFn();
+      }
+
+      const controller = new AbortController();
+      // Tight 400ms timeout for local backend to prevent UI stutter/lag
+      const timeoutId = setTimeout(() => controller.abort(), 400);
+
+      const res = await fetch(`${API_BASE}${endpoint}`, {
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeader,
+          ...(options?.headers || {}),
+        },
+        signal: controller.signal,
+        ...options,
+      });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          return fallbackFn();
+        }
+        return fallbackFn();
+      }
+
+      const result = await res.json();
+      return (result.data ?? result) as T;
+    } catch {
+      // Offline / backend not running / timeout -> trip circuit breaker for 15s to keep UI instant
+      backendOfflineUntil = Date.now() + 15000;
+      return fallbackFn();
+    } finally {
+      if (method === "GET") {
+        inFlightGetRequests.delete(endpoint);
+      }
+    }
+  };
+
+  if (method === "GET") {
+    const promise = execute();
+    inFlightGetRequests.set(endpoint, promise);
+    return promise;
+  }
+
+  return execute();
 }
 
 export const KostApiClient = {
@@ -298,17 +343,13 @@ export const KostApiClient = {
   async recordPayment(payload: {
     invoice_id: string;
     amount_paid: number;
-    payment_method: string;
+    wallet_id: string;
     proof_url?: string;
     verified_by?: string;
     notes?: string;
   }): Promise<Payment> {
-    const local = KostStorage.verifyPayment(payload as any);
-    fetchWithFallback("/payments", () => local, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    return local;
+    const { FinanceApi } = await import("./finance-api");
+    return FinanceApi.recordInvoicePayment(payload);
   },
 
   // Payment Methods Config

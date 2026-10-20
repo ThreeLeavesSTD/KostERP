@@ -9,6 +9,8 @@ dist/
 
 # next.js
 /.next/
+/.next-*/
+/.playwright-mcp/
 /out/
 
 # production

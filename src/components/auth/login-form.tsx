@@ -61,7 +61,7 @@ export function LoginForm() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#EDEDED] p-4 dark:bg-[#0A0A0A]">
-      <div className="w-full max-w-md rounded-4xl bg-white p-8 shadow-spatial dark:bg-[#18181B] border border-white/80 dark:border-white/10">
+      <div className="w-full max-w-md rounded-4xl bg-white p-6 sm:p-8 shadow-spatial dark:bg-[#18181B] border border-white/80 dark:border-white/10">
         {/* Header Branding */}
         <div className="mb-6 flex flex-col items-center text-center">
           <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-[#0A0A0A] text-[#D9FF43] shadow-spatial dark:bg-white dark:text-[#0A0A0A]">
@@ -89,7 +89,7 @@ export function LoginForm() {
               setError("");
               setSuccessMessage("");
             }}
-            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
+            className={`min-h-11 flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
               !isSignUp
                 ? "bg-white text-neutral-900 shadow-sm dark:bg-neutral-900 dark:text-white"
                 : "text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white"
@@ -104,7 +104,7 @@ export function LoginForm() {
               setError("");
               setSuccessMessage("");
             }}
-            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
+            className={`min-h-11 flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
               isSignUp
                 ? "bg-white text-neutral-900 shadow-sm dark:bg-neutral-900 dark:text-white"
                 : "text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white"

@@ -18,17 +18,19 @@ import {
 } from "lucide-react";
 import { Tenant, Lease, Room } from "@/types";
 import { KostApiClient } from "@/lib/api-client";
+import { KostStorage } from "@/lib/storage";
 import { formatRupiah, formatDateIndo } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { TenantFormModal } from "./tenant-form-modal";
 import { LeaseModal } from "./lease-modal";
 import { Modal } from "@/components/ui/modal";
 import { notify } from "@/lib/notify";
+import { TenantMobileList } from "./tenant-mobile-list";
 
 export function TenantsView() {
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [leases, setLeases] = useState<Lease[]>([]);
-  const [rooms, setRooms] = useState<Room[]>([]);
+  const [tenants, setTenants] = useState<Tenant[]>(() => KostStorage.getTenants());
+  const [leases, setLeases] = useState<Lease[]>(() => KostStorage.getLeases());
+  const [rooms, setRooms] = useState<Room[]>(() => KostStorage.getRooms());
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"tenants" | "leases">("tenants");
 
@@ -38,10 +40,9 @@ export function TenantsView() {
   const [isLeaseModalOpen, setIsLeaseModalOpen] = useState(false);
   const [previewKtpUrl, setPreviewKtpUrl] = useState<string | null>(null);
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(() => KostStorage.getTenants().length === 0);
 
   const loadData = async () => {
-    setIsLoading(true);
     try {
       const [t, l, r] = await Promise.all([
         KostApiClient.getTenants(),
@@ -60,6 +61,14 @@ export function TenantsView() {
 
   useEffect(() => {
     loadData();
+
+    const handleStorageChange = () => {
+      setTenants(KostStorage.getTenants());
+      setLeases(KostStorage.getLeases());
+      setRooms(KostStorage.getRooms());
+    };
+    window.addEventListener("kost_storage_change", handleStorageChange);
+    return () => window.removeEventListener("kost_storage_change", handleStorageChange);
   }, []);
 
   const filteredTenants = tenants.filter((t) => {
@@ -138,7 +147,7 @@ export function TenantsView() {
       {/* Top Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-2xl font-black tracking-tight text-neutral-900 dark:text-white">
               Penghuni & Kontrak Sewa
             </h2>
@@ -151,7 +160,7 @@ export function TenantsView() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-center">
           <Button
             variant="outline"
             onClick={() => setIsLeaseModalOpen(true)}
@@ -176,7 +185,7 @@ export function TenantsView() {
 
       {/* View Switcher & Search Bar */}
       <div className="flex flex-col sm:flex-row gap-3 items-center justify-between rounded-3xl bg-white p-3 shadow-spatial border border-white/80 dark:bg-[#18181B] dark:border-white/10">
-        <div className="flex items-center gap-1.5 rounded-full bg-neutral-100 p-1 dark:bg-neutral-800 shrink-0">
+        <div className="flex w-full min-w-0 items-center gap-1.5 overflow-x-auto rounded-full bg-neutral-100 p-1 dark:bg-neutral-800 sm:w-auto sm:shrink-0">
           <button
             onClick={() => setActiveTab("tenants")}
             className={`rounded-full px-4 py-2 text-xs font-bold transition-all ${
@@ -204,6 +213,7 @@ export function TenantsView() {
           <Search className="absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400" />
           <input
             type="text"
+            aria-label="Cari penghuni"
             placeholder="Cari nama, NIK, atau no WA..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -214,7 +224,9 @@ export function TenantsView() {
 
       {/* Tab 1: Tenants List */}
       {activeTab === "tenants" && (
-        <div className="overflow-hidden rounded-3xl border border-white/80 bg-white shadow-spatial dark:bg-[#18181B] dark:border-white/10">
+        <>
+        <TenantMobileList tenants={filteredTenants} leases={leases} rooms={rooms} loading={isLoading} onEdit={tenant => { setTenantToEdit(tenant); setIsTenantModalOpen(true); }} onDelete={handleDeleteTenant} onPreviewId={setPreviewKtpUrl} />
+        <div className="hidden overflow-hidden rounded-3xl border border-white/80 bg-white shadow-spatial dark:bg-[#18181B] dark:border-white/10 sm:block">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="border-b border-neutral-100 bg-neutral-50/80 text-[11px] font-bold uppercase tracking-wider text-neutral-500 dark:bg-neutral-800/60 dark:border-white/10">
@@ -351,6 +363,7 @@ export function TenantsView() {
             </table>
           </div>
         </div>
+        </>
       )}
 
       {/* Tab 2: Active Leases Bento Grid */}

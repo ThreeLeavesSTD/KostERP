@@ -85,13 +85,17 @@ export function StatCard({
         )}
       </div>
       {trend && (
-        <div className="mt-4 flex items-center gap-2 text-xs font-medium border-t border-neutral-100 dark:border-white/5 pt-3">
+        <div className={cn("mt-4 flex items-center gap-2 text-xs font-medium border-t pt-3", isDark ? "border-white/10" : "border-neutral-100 dark:border-white/5")}>
           <span
             className={cn(
               "rounded-full px-2.5 py-0.5 text-[10px] font-bold",
               trend.isPositive
-                ? "bg-[#D9FF43]/30 text-[#244300] dark:bg-[#D9FF43]/20 dark:text-[#D9FF43]"
-                : "bg-rose-500/20 text-rose-300"
+                ? isDark
+                  ? "bg-[#D9FF43] text-[#0A0A0A]"
+                  : "bg-[#D9FF43] text-[#0A0A0A] dark:bg-[#D9FF43]/20 dark:text-[#D9FF43]"
+                : isDark
+                  ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                  : "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300"
             )}
           >
             {trend.value}

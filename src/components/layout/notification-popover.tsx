@@ -176,8 +176,10 @@ export function NotificationPopover({ onNavigateTab }: NotificationPopoverProps)
       {/* Bell Trigger Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
+        aria-label="Buka notifikasi"
+        aria-expanded={isOpen}
         title="Pemberitahuan & Notifikasi Sistem"
-        className={`relative flex h-10 w-10 items-center justify-center rounded-full transition-all duration-200 ${
+        className={`relative flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200 ${
           isOpen
             ? "bg-[#0A0A0A] text-white shadow-spatial scale-105 dark:bg-white dark:text-[#0A0A0A]"
             : "bg-white/80 text-neutral-700 shadow-spatial border border-white/60 hover:bg-white dark:bg-[#18181B]/80 dark:text-neutral-300 dark:border-white/10 dark:hover:bg-neutral-800"
@@ -194,7 +196,7 @@ export function NotificationPopover({ onNavigateTab }: NotificationPopoverProps)
 
       {/* Popover Dropdown Menu */}
       {isOpen && (
-        <div className="absolute right-0 mt-3 w-80 sm:w-96 rounded-3xl bg-white p-4 shadow-spatial-lg border border-neutral-200/80 dark:bg-[#18181B] dark:border-white/10 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="absolute -right-[52px] z-50 mt-3 max-h-[calc(100dvh-10rem)] w-[calc(100vw-1.5rem)] overflow-y-auto overscroll-contain rounded-3xl border border-neutral-200/80 bg-white p-4 shadow-spatial-lg animate-in fade-in slide-in-from-top-2 dark:border-white/10 dark:bg-[#18181B] sm:right-0 sm:w-96">
           {/* Header */}
           <div className="flex items-center justify-between pb-3 border-b border-neutral-100 dark:border-white/10">
             <div className="flex items-center gap-2">

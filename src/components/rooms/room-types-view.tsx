@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { RoomType, UserRole } from "@/types";
 import { KostApiClient } from "@/lib/api-client";
+import { KostStorage } from "@/lib/storage";
 import { formatRupiah } from "@/lib/utils";
 import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
@@ -28,13 +29,14 @@ interface RoomTypesViewProps {
 }
 
 export function RoomTypesView({ currentRole, onNavigateTab }: RoomTypesViewProps) {
-  const [roomTypes, setRoomTypes] = useState<RoomType[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [roomTypes, setRoomTypes] = useState<RoomType[]>(() => {
+    return typeof window !== "undefined" ? KostStorage.getRoomTypes() : [];
+  });
+  const [isLoading, setIsLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTypeToEdit, setSelectedTypeToEdit] = useState<RoomType | null>(null);
 
   const loadData = async () => {
-    setIsLoading(true);
     try {
       const data = await KostApiClient.getRoomTypes();
       setRoomTypes(data);
@@ -47,6 +49,12 @@ export function RoomTypesView({ currentRole, onNavigateTab }: RoomTypesViewProps
 
   useEffect(() => {
     loadData();
+
+    const handleStorageChange = () => {
+      setRoomTypes(KostStorage.getRoomTypes());
+    };
+    window.addEventListener("kost_storage_change", handleStorageChange);
+    return () => window.removeEventListener("kost_storage_change", handleStorageChange);
   }, []);
 
   const handleOpenAdd = () => {

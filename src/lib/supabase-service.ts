@@ -291,6 +291,7 @@ export const FrontendSupabaseService = {
         invoice_id: p.invoice_id,
         amount_paid: Number(p.amount_paid),
         payment_method: p.payment_method,
+        wallet_id: p.wallet_id || null,
         proof_url: p.proof_url,
         verified_by: p.verified_by,
         paid_at: p.paid_at,

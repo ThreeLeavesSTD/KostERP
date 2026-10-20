@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { FinanceWallet, CashTransaction, UserRole, WalletKind, FinanceCategory } from "@/types";
 import { KostApiClient } from "@/lib/api-client";
+import { KostStorage } from "@/lib/storage";
 import { formatRupiah, formatDateIndo } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,16 +44,39 @@ interface CashFlowViewProps {
 type MainViewMode = "wallets" | "transactions";
 type TimeFilter = "all" | "today" | "week" | "month" | "year" | "custom";
 
+function computeBalances(wals: FinanceWallet[], list: CashTransaction[]) {
+  return wals.map((w) => {
+    const txs = list.filter((tx) => tx.wallet_id === w.id || tx.payment_method === w.name);
+    let income = 0;
+    let expense = 0;
+    txs.forEach((tx) => {
+      if (tx.type === "income") income += tx.amount;
+      else expense += tx.amount;
+    });
+    const balance = (w.initial_balance || 0) + income - expense;
+    return { wallet: w, balance, totalIncome: income, totalExpense: expense };
+  });
+}
+
 export function CashFlowView({ currentRole = "owner" }: CashFlowViewProps) {
   // Main View Toggle: "wallets" (Screenshot 1) vs "transactions" (Screenshot 4)
   const [mainViewMode, setMainViewMode] = useState<MainViewMode>("wallets");
 
-  // State Data
-  const [transactions, setTransactions] = useState<CashTransaction[]>([]);
-  const [wallets, setWallets] = useState<FinanceWallet[]>([]);
+  // State Data - instant cached storage
+  const [transactions, setTransactions] = useState<CashTransaction[]>(() => {
+    return typeof window !== "undefined" ? KostStorage.getCashTransactions() : [];
+  });
+  const [wallets, setWallets] = useState<FinanceWallet[]>(() => {
+    return typeof window !== "undefined" ? KostStorage.getWallets() : [];
+  });
   const [walletBalances, setWalletBalances] = useState<
     { wallet: FinanceWallet; balance: number; totalIncome: number; totalExpense: number }[]
-  >([]);
+  >(() => {
+    if (typeof window === "undefined") return [];
+    const list = KostStorage.getCashTransactions();
+    const wals = KostStorage.getWallets();
+    return computeBalances(wals, list);
+  });
 
   // Modals
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
@@ -71,12 +95,13 @@ export function CashFlowView({ currentRole = "owner" }: CashFlowViewProps) {
   const [toDate, setToDate] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [walletFilter, setWalletFilter] = useState("all");
-  const [txCategories, setTxCategories] = useState<FinanceCategory[]>([]);
+  const [txCategories, setTxCategories] = useState<FinanceCategory[]>(() => {
+    return typeof window !== "undefined" ? KostStorage.getFinanceCategories("transaction") : [];
+  });
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
   const loadData = async () => {
-    setIsLoading(true);
     try {
       const [list, wals, cats] = await Promise.all([
         KostApiClient.getCashTransactions(),
@@ -84,17 +109,7 @@ export function CashFlowView({ currentRole = "owner" }: CashFlowViewProps) {
         KostApiClient.getFinanceCategories("transaction"),
       ]);
 
-      const balances = wals.map((w) => {
-        const txs = list.filter((tx) => tx.wallet_id === w.id || tx.payment_method === w.name);
-        let income = 0;
-        let expense = 0;
-        txs.forEach((tx) => {
-          if (tx.type === "income") income += tx.amount;
-          else expense += tx.amount;
-        });
-        const balance = (w.initial_balance || 0) + income - expense;
-        return { wallet: w, balance, totalIncome: income, totalExpense: expense };
-      });
+      const balances = computeBalances(wals, list);
 
       setTransactions(list);
       setWallets(wals);
@@ -109,6 +124,18 @@ export function CashFlowView({ currentRole = "owner" }: CashFlowViewProps) {
 
   useEffect(() => {
     loadData();
+
+    const handleStorageChange = () => {
+      const list = KostStorage.getCashTransactions();
+      const wals = KostStorage.getWallets();
+      setTransactions(list);
+      setWallets(wals);
+      setWalletBalances(computeBalances(wals, list));
+      setTxCategories(KostStorage.getFinanceCategories("transaction"));
+    };
+
+    window.addEventListener("kost_storage_change", handleStorageChange);
+    return () => window.removeEventListener("kost_storage_change", handleStorageChange);
   }, []);
 
   // Assets and Liabilities Separation
@@ -308,11 +335,23 @@ export function CashFlowView({ currentRole = "owner" }: CashFlowViewProps) {
           </div>
 
           {/* NET WORTH HERO BANNER (MATCHING SCREENSHOT 1) */}
-          <div className="rounded-3xl bg-[#0A0A0A] text-white p-6 sm:p-7 shadow-spatial border border-neutral-800 dark:bg-[#18181B] dark:border-white/10 relative overflow-hidden">
-            {/* Background subtle glow */}
-            <div className="absolute top-0 right-1/4 w-96 h-96 bg-[#D9FF43]/5 rounded-full blur-3xl pointer-events-none" />
+          <div className="relative overflow-hidden rounded-[24px] bg-[#0B0C0E] p-6 sm:p-7 text-white shadow-spatial border border-white/[0.09] transition-all duration-300">
+            {/* Cosmic Ambience: Star particles & subtle radial glow */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden">
+              <div 
+                className="absolute top-0 right-1/4 w-96 h-96 rounded-full blur-3xl pointer-events-none"
+                style={{
+                  background: "radial-gradient(circle, rgba(217, 255, 67, 0.08) 0%, rgba(132, 204, 22, 0.02) 50%, transparent 70%)",
+                  animation: "auraPulse 6s ease-in-out infinite",
+                }}
+              />
+              <span className="star-particle" style={{ top: "15%", left: "18%", "--star-size": "3px", "--star-delay": "0s", "--star-duration": "4.5s" } as React.CSSProperties} />
+              <span className="star-particle" style={{ top: "40%", right: "24%", "--star-size": "4px", "--star-delay": "1.2s", "--star-duration": "5.2s" } as React.CSSProperties} />
+              <span className="star-particle" style={{ bottom: "20%", left: "40%", "--star-size": "3px", "--star-delay": "2.4s", "--star-duration": "6s" } as React.CSSProperties} />
+              <span className="star-particle" style={{ top: "68%", right: "12%", "--star-size": "3.5px", "--star-delay": "3.1s", "--star-duration": "4.8s" } as React.CSSProperties} />
+            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+            <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
               {/* Left 7 Cols: Net Worth */}
               <div className="lg:col-span-7 space-y-3">
                 <div className="flex items-center gap-2 text-[#D9FF43] font-black text-xs tracking-wider uppercase">

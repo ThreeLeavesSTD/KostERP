@@ -6,6 +6,7 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Invoice, PaymentMethodConfig, Property } from "@/types";
 import { KostApiClient } from "@/lib/api-client";
+import { invoicePaymentSummary } from "@/lib/finance";
 import { formatDateIndo, formatRupiah } from "@/lib/utils";
 
 interface InvoiceDetailModalProps {
@@ -48,6 +49,7 @@ export function InvoiceDetailModal({
 
   if (!invoice) return null;
 
+  const paymentSummary = invoicePaymentSummary(invoice);
   const isPaid = invoice.status === "paid";
   const isOverdue = invoice.status === "overdue";
 
@@ -202,6 +204,16 @@ Batas Waktu: ${formatDateIndo(invoice.due_date)}`;
                     {formatRupiah(invoice.total_amount)}
                   </td>
                 </tr>
+                {(paymentSummary.paid > 0 || paymentSummary.outstanding < invoice.total_amount) && <>
+                  <tr>
+                    <td className="px-4 py-2.5 text-neutral-600 dark:text-neutral-400">Sudah dibayar</td>
+                    <td className="px-4 py-2.5 text-right text-emerald-700 dark:text-emerald-300">{formatRupiah(paymentSummary.paid)}</td>
+                  </tr>
+                  <tr>
+                    <td className="px-4 py-2.5 text-neutral-600 dark:text-neutral-400">Sisa tagihan</td>
+                    <td className="px-4 py-2.5 text-right text-neutral-900 dark:text-white">{formatRupiah(paymentSummary.outstanding)}</td>
+                  </tr>
+                </>}
               </tfoot>
             </table>
           </div>

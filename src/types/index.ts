@@ -134,6 +134,8 @@ export interface Payment {
   invoice_id: string;
   amount_paid: number;
   payment_method: string;
+  wallet_id?: string | null;
+  wallet_name?: string;
   proof_url?: string;
   verified_by: string;
   paid_at: string;
@@ -318,6 +320,7 @@ export interface FinanceWallet {
 export interface CashTransaction {
   id: string;
   property_id: string;
+  room_id?: string | null;
   type: TransactionType;
   category: string;
   category_name?: string;

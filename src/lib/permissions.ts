@@ -1,9 +1,20 @@
 import { UserRole } from "@/types";
+import { FINANCE_ROUTES } from "@/types/finance";
+
+export function financeLanding(role: UserRole | string, permissions?: string[]) {
+  return FINANCE_ROUTES.find(id => hasPermission(role, id, permissions));
+}
 
 export const ALL_PERMISSIONS = [
   "owner-dashboard",
   "ai-assistant",
   "cashflow",
+  "finance",
+  "expenses",
+  "pnl",
+  "unit-ekonomi",
+  "budget",
+  "reports",
   "staff-management",
   "rooms",
   "room-types",

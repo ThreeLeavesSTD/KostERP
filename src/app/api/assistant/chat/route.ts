@@ -46,12 +46,18 @@ export async function POST(req: Request) {
     }
 
     const trimmedMessage = message.trim();
+    if (trimmedMessage.length > 4000) {
+      return NextResponse.json(
+        { success: false, error: "Pesan terlalu panjang. Maksimal 4.000 karakter." },
+        { status: 400 }
+      );
+    }
     const sessionId = session_id || "kost-concierge-web-session";
 
     // 1. Coba delegasikan ke Backend Express (/api/webhooks/chatbot) yang membaca backend/.env
     try {
       const backendController = new AbortController();
-      const backendTimeoutId = setTimeout(() => backendController.abort(), 4000);
+      const backendTimeoutId = setTimeout(() => backendController.abort(), 35000);
       const backendRes = await fetch(`${BACKEND_BASE}/webhooks/chatbot`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

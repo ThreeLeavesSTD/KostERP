@@ -13,6 +13,7 @@ interface InvoiceFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   invoiceToEdit?: Invoice | null;
+  propertyId: string;
   onSuccess: () => void;
 }
 
@@ -20,6 +21,7 @@ export function InvoiceFormModal({
   isOpen,
   onClose,
   invoiceToEdit,
+  propertyId,
   onSuccess,
 }: InvoiceFormModalProps) {
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -41,15 +43,17 @@ export function InvoiceFormModal({
     Promise.all([KostApiClient.getRooms(), KostApiClient.getTenants()])
       .then(([loadedRooms, loadedTenants]) => {
         if (!isMounted) return;
-        setRooms(loadedRooms);
-        setTenants(loadedTenants);
+        const scopedRooms = loadedRooms.filter(room => room.property_id === propertyId);
+        const scopedTenants = loadedTenants.filter(tenant => tenant.property_id === propertyId);
+        setRooms(scopedRooms);
+        setTenants(scopedTenants);
 
         if (invoiceToEdit) {
           setBillingPeriod(invoiceToEdit.billing_period || new Date().toISOString().slice(0, 7));
           setDueDate(invoiceToEdit.due_date || "");
           setNotes(invoiceToEdit.notes || "");
           
-          const foundRoom = loadedRooms.find((r) => r.room_number === invoiceToEdit.room_number);
+          const foundRoom = scopedRooms.find((r) => r.room_number === invoiceToEdit.room_number);
           if (foundRoom) {
             setSelectedRoomId(foundRoom.id);
             setSelectedTenantId(foundRoom.tenant_id || foundRoom.current_tenant?.id || "");
@@ -85,7 +89,7 @@ export function InvoiceFormModal({
     return () => {
       isMounted = false;
     };
-  }, [invoiceToEdit, isOpen]);
+  }, [invoiceToEdit, isOpen, propertyId]);
 
   const handleRoomChange = (roomId: string) => {
     setSelectedRoomId(roomId);
@@ -164,6 +168,7 @@ export function InvoiceFormModal({
       } else {
         const invNumber = `INV/${billingPeriod.replace("-", "")}/${Math.floor(100 + Math.random() * 900)}`;
         await KostApiClient.createInvoice({
+          property_id: selectedRoom?.property_id || propertyId,
           lease_id: selectedRoom?.current_tenant?.lease_id || undefined,
           room_id: selectedRoom?.id,
           invoice_number: invNumber,
