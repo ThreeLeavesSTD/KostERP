@@ -1,0 +1,13 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[functions]
+  external_node_modules = ["express"]
+
+# Backend Express berjalan sebagai Netlify Function di /api/backend/*
+[[redirects]]
+  from = "/api/backend/*"
+  to = "/.netlify/functions/backend/:splat"
+  status = 200
+  force = true

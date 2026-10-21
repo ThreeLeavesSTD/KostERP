@@ -22,7 +22,8 @@ import {
 import { createClient } from "./supabase/client";
 import { KostStorage } from "./storage";
 
-const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000/api";
+const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL ||
+  (process.env.NODE_ENV === "production" ? "/api/backend" : "http://localhost:5000/api");
 
 // Fast Circuit Breaker & In-Flight Request Deduplication for Ultra-Low Latency (0ms)
 let backendOfflineUntil = 0;
