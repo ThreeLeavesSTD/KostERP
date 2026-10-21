@@ -90,7 +90,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
 
   const supabase = createClient();
-  const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000/api";
+  const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ||
+    (process.env.NODE_ENV === "production" ? "/api/backend" : "http://localhost:5000/api");
 
   const fetchProfile = useCallback(async (token: string): Promise<UserProfile | null> => {
     try {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-const BACKEND_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000/api";
+const BACKEND_BASE = process.env.NEXT_PUBLIC_BACKEND_URL ||
+  (process.env.NODE_ENV === "production" ? "/api/backend" : "http://localhost:5000/api");
 const DEFAULT_N8N_WEBHOOK =
   process.env.N8N_WEBHOOK_CHATBOT ||
   process.env.NEXT_PUBLIC_N8N_WEBHOOK_CHATBOT ||
@@ -58,7 +59,7 @@ export async function POST(req: Request) {
     try {
       const backendController = new AbortController();
       const backendTimeoutId = setTimeout(() => backendController.abort(), 35000);
-      const backendRes = await fetch(`${BACKEND_BASE}/webhooks/chatbot`, {
+      const backendRes = await fetch(new URL(`${BACKEND_BASE}/webhooks/chatbot`, req.url), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
