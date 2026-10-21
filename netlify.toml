@@ -1,0 +1,31 @@
+[build]
+  command = "npm run build:netlify"
+
+[functions]
+  directory = "backend/netlify/functions"
+  external_node_modules = ["express"]
+  node_bundler = "esbuild"
+
+[[redirects]]
+  from = "/backend/api/*"
+  to = "/.netlify/functions/api/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/backend/health"
+  to = "/.netlify/functions/api/health"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/webhooks/payment-verified"
+  to = "/.netlify/functions/api/api/webhooks/payment-verified"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/webhooks/chatbot"
+  to = "/.netlify/functions/api/api/webhooks/chatbot"
+  status = 200
+  force = true

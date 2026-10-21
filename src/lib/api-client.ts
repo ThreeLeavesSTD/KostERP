@@ -22,7 +22,9 @@ import {
 import { createClient } from "./supabase/client";
 import { KostStorage } from "./storage";
 
-const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000/api";
+const API_BASE =
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  (process.env.NODE_ENV === "production" ? "/backend/api" : "http://localhost:5000/api");
 
 // Fast Circuit Breaker & In-Flight Request Deduplication for Ultra-Low Latency (0ms)
 let backendOfflineUntil = 0;
@@ -75,8 +77,11 @@ async function fetchWithFallback<T>(
       }
 
       const controller = new AbortController();
-      // Tight 400ms timeout for local backend to prevent UI stutter/lag
-      const timeoutId = setTimeout(() => controller.abort(), 400);
+      // Local requests stay fast; allow serverless cold starts in production.
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        process.env.NODE_ENV === "production" ? 10000 : 400
+      );
 
       const res = await fetch(`${API_BASE}${endpoint}`, {
         headers: {

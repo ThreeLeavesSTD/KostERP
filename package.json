@@ -8,6 +8,8 @@
     "dev:backend": "npm --prefix backend run dev",
     "dev:all": "concurrently --kill-others \"npm run dev:backend\" \"npm run dev:frontend\"",
     "build": "next build",
+    "build:backend": "npm --prefix backend ci && npm --prefix backend run build",
+    "build:netlify": "npm run build:backend && npm run build",
     "start": "next start",
     "lint": "next lint",
     "test:finance": "node --test scripts/test-finance.cjs"
