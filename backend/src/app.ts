@@ -30,6 +30,7 @@ const configuredOrigins = (process.env.CORS_ORIGIN || "http://localhost:3000")
 
 const allowedOrigins = new Set([
   ...configuredOrigins,
+  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
   process.env.URL,
   process.env.DEPLOY_PRIME_URL,
   process.env.DEPLOY_URL,

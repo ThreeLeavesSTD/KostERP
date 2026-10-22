@@ -1,0 +1,59 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "app": {
+      "root": ".",
+      "framework": "nextjs",
+      "bindings": [
+        {
+          "type": "service",
+          "service": "backend",
+          "format": "url",
+          "env": "BACKEND_URL"
+        }
+      ]
+    },
+    "backend": {
+      "root": "backend",
+      "framework": "express"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/assistant/chat",
+      "destination": {
+        "service": "app"
+      }
+    },
+    {
+      "source": "/api/webhooks/whatsapp-cs-ai",
+      "destination": {
+        "service": "app"
+      }
+    },
+    {
+      "source": "/api/webhooks/dispatch",
+      "destination": {
+        "service": "app"
+      }
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
+      "source": "/health",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "app"
+      }
+    }
+  ]
+}

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
-const BACKEND_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000/api";
+const BACKEND_BASE = process.env.BACKEND_URL
+  ? `${process.env.BACKEND_URL.replace(/\/+$/, "")}/api`
+  : process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000/api";
 const DEFAULT_N8N_WEBHOOK =
   process.env.N8N_WEBHOOK_CHATBOT ||
   process.env.NEXT_PUBLIC_N8N_WEBHOOK_CHATBOT ||

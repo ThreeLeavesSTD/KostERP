@@ -21,10 +21,11 @@ import {
 } from "@/types";
 import { createClient } from "./supabase/client";
 import { KostStorage } from "./storage";
+import { FrontendSupabaseService } from "./supabase-service";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_BACKEND_URL ||
-  (process.env.NODE_ENV === "production" ? "/backend/api" : "http://localhost:5000/api");
+  (process.env.NODE_ENV === "production" ? "/api" : "http://localhost:5000/api");
 
 // Fast Circuit Breaker & In-Flight Request Deduplication for Ultra-Low Latency (0ms)
 let backendOfflineUntil = 0;
@@ -133,9 +134,15 @@ export const KostApiClient = {
 
   // Properties
   async getProperties(): Promise<Property[]> {
-    return fetchWithFallback<Property[]>("/properties", () =>
-      KostStorage.getProperties()
-    );
+    // Prefer the authenticated Supabase session so stale demo properties from
+    // localStorage cannot override the property configured for this account.
+    const supabaseProperties = await FrontendSupabaseService.getProperties();
+    if (supabaseProperties.length > 0) return supabaseProperties;
+
+    // The API may have access through its own auth path even if the browser
+    // query returned no rows. An empty fallback avoids showing an old demo name
+    // when both live sources are unavailable.
+    return fetchWithFallback<Property[]>("/properties", () => []);
   },
 
   async getPropertyById(id: string): Promise<Property> {

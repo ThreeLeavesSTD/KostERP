@@ -87,10 +87,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(initial.session);
   const [profile, setProfile] = useState<UserProfile | null>(initial.profile);
   const [role, setRole] = useState<UserRole>(initial.role);
-  const [isLoading, setIsLoading] = useState(false);
+  // Keep the app in its boot state until Supabase has restored its persisted
+  // session. Otherwise a refresh briefly renders the login form as if signed out.
+  const [isLoading, setIsLoading] = useState(true);
 
   const supabase = createClient();
-  const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000/api";
+  const BACKEND_URL =
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    (process.env.NODE_ENV === "production" ? "/api" : "http://localhost:5000/api");
 
   const fetchProfile = useCallback(async (token: string): Promise<UserProfile | null> => {
     try {
@@ -155,11 +159,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Cek session saat pertama mount
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        syncAuthState(session);
-      } else {
-        // Cek sesi staf atau owner lokal tersimpan
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        if (session) {
+          syncAuthState(session);
+          return;
+        }
+
+        // Restore the legacy local staff/demo session only when Supabase has no session.
         if (typeof window !== "undefined") {
           try {
             const savedUser = localStorage.getItem("kost_local_auth_user");
@@ -170,14 +177,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               setUser(u);
               setProfile(p);
               setRole(p.role || "admin");
+              setSession(null);
               setIsLoading(false);
               return;
             }
           } catch {}
         }
         syncAuthState(null);
-      }
-    });
+      })
+      .catch((error) => {
+        console.warn("Gagal memulihkan sesi Supabase:", error);
+        // If Supabase cannot be reached, retain the locally persisted session
+        // rather than forcing a signed-in local user to the login screen.
+        if (typeof window !== "undefined") {
+          try {
+            const savedUser = localStorage.getItem("kost_local_auth_user");
+            const savedProfile = localStorage.getItem("kost_local_auth_profile");
+            if (savedUser && savedProfile) {
+              const u = JSON.parse(savedUser);
+              const p = JSON.parse(savedProfile);
+              setUser(u);
+              setProfile(p);
+              setRole(p.role || "admin");
+              setSession(null);
+            } else {
+              setUser(null);
+              setProfile(null);
+              setSession(null);
+              setRole("admin");
+            }
+          } catch {
+            setUser(null);
+            setProfile(null);
+            setSession(null);
+            setRole("admin");
+          }
+        }
+        setIsLoading(false);
+      });
 
     // Listen ke perubahan sesi autentikasi Supabase
     const {
